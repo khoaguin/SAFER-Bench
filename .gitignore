@@ -1,0 +1,7 @@
+# Ignore all files in datasets directory
+datasets/*
+# But keep README.md files
+!datasets/README.md
+!datasets/**/README.md
+
+.DS_Store
