@@ -1,3 +1,5 @@
+**.venv
+
 # Ignore all files in datasets directory
 datasets/*
 # But keep README.md files
@@ -5,3 +7,10 @@ datasets/*
 !datasets/**/README.md
 
 .DS_Store
+
+
+**local_syftbox_network
+**.server
+**.syftbox
+
+**__pycache__

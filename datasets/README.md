@@ -1,24 +1,5 @@
 ## Datasets
 
-## Dataset Overview
-
-| Dataset | Type | Strength | Language Style | Size | Use Case |
-|---------|------|----------|----------------|------|----------|
-| **MIMIC-IV-Note** | Real clinical narratives | Actual medical practice, diverse cases, temporal data | Clinical shorthand, abbreviations, informal | 2.3M+ notes | Testing real-world applicability |
-| **StatPearls** | Medical reference articles | Comprehensive, peer-reviewed, educational | Formal, structured, educational | 9,300 articles | Factual medical knowledge |
-| **Textbooks** | Educational material | Foundational concepts, systematic coverage | Formal, detailed explanations | 18 books | Core medical principles |
-
-## Dataset Details
-
-### MIMIC-IV-Note
-Raw notes downloaded from https://physionet.org/content/mimic-iv-note/2.2/
-
-- **Type**: Real clinical narratives
-- **Strength**: Actual medical practice, diverse cases, temporal data
-- **Language**: Clinical shorthand, abbreviations, informal
-- **Size**: 2.3M+ notes
-- **Use for**: Testing real-world applicability
-
 ### StatPearls
 Downloaded and processed based on https://github.com/adap/flower/tree/main/examples/fedrag/data
 - **Type**: Medical reference articles
@@ -26,6 +7,7 @@ Downloaded and processed based on https://github.com/adap/flower/tree/main/examp
 - **Language**: Formal, structured, educational
 - **Size**: 9,300 articles
 - **Use for**: Factual medical knowledge
+- **Status**: ✅ Available
 
 ### Textbooks
 Downloaded and processed based on https://github.com/adap/flower/tree/main/examples/fedrag/data
@@ -34,5 +16,22 @@ Downloaded and processed based on https://github.com/adap/flower/tree/main/examp
 - **Language**: Formal, detailed explanations
 - **Size**: 18 books
 - **Use for**: Core medical principles
+- **Status**: ✅ Available
 
-- 
+### MIMIC-IV-Ext-BHC
+Pre-segmented version available from https://physionet.org/content/labelled-notes-hospital-course/1.2.0/
+- **Type**: Pre-segmented clinical notes
+- **Strength**: Pre-chunked, cleaned, structured sections
+- **Language**: Clinical narratives with clear headers
+- **Size**: 270,033 notes
+- **Use for**: Pre-processed for ML/RAG
+- **Status**: ⏳ Planned for integration
+
+### MIMIC-IV-Note
+Raw notes downloaded from https://physionet.org/content/mimic-iv-note/2.2/
+- **Type**: Real clinical narratives
+- **Strength**: Actual medical practice, diverse cases, temporal data
+- **Language**: Clinical shorthand, abbreviations, informal
+- **Size**: 2.3M+ notes
+- **Use for**: Testing real-world applicability
+- **Status**: ✅ Available

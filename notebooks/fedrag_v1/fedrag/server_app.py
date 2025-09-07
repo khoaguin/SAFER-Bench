@@ -1,11 +1,11 @@
 """fedrag: A Flower Federated RAG app."""
 
 import hashlib
-import os
 import time
 from collections import defaultdict
 from itertools import cycle
 from time import sleep
+from pathlib import Path
 
 import numpy as np
 from flwr.common import ConfigRecord, Context, Message, MessageType, RecordDict
@@ -14,7 +14,9 @@ from sklearn.metrics import accuracy_score
 
 from fedrag.llm_querier import LLMQuerier
 from fedrag.mirage_qa import MirageQA
-from fedrag.task import index_exists
+
+
+MIRAGE_FILE_PATH = Path(__file__).parents[3] / "datasets" / "server" / "mirage.json"
 
 
 def node_online_loop(grid: Grid) -> list[int]:
@@ -125,10 +127,7 @@ def main(grid: Grid, context: Context) -> None:
     knn = int(context.run_config["k-nn"])
     corpus_names = context.run_config["clients-corpus-names"].split("|")
     corpus_names = [c.lower() for c in corpus_names]  # make them lower case
-    # Before we start the execution of the FedRAG pipeline,
-    # we need to make sure we have downloaded the corpus and
-    # created the respective indices
-    index_exists(corpus_names)
+
     # Create corpus iterator
     corpus_names_iter = cycle(corpus_names)
     qa_datasets = context.run_config["server-qa-datasets"].split("|")
@@ -138,8 +137,7 @@ def main(grid: Grid, context: Context) -> None:
     use_gpu = context.run_config.get("server-llm-use-gpu", False)
     use_gpu = True if use_gpu.lower() == "true" else False
 
-    mirage_file = os.path.join(os.path.dirname(__file__), "../../data/mirage.json")
-    datasets = {key: MirageQA(key, mirage_file) for key in qa_datasets}
+    datasets = {key: MirageQA(key, MIRAGE_FILE_PATH) for key in qa_datasets}
 
     llm_querier = LLMQuerier(model_name, use_gpu)
     expected_answers, predicted_answers, question_times, unanswered_questions = (

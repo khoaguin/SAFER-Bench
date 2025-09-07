@@ -1,0 +1,15 @@
+[project]
+name = "fedrag-notebooks"
+version = "0.1.0"
+description = ""
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "flwr[simulation]>=1.20.0",
+    "numpy>=2.3.0",
+    "faiss-cpu>=1.10.0",
+    "tqdm>=4.67",
+    "sentence_transformers>=5.0.0",
+    "jupyterlab>=4.4.5",
+    "syft_flwr==0.2.1",
+]

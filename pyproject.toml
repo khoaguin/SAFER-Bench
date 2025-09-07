@@ -11,3 +11,8 @@ dependencies = [
     "sentence_transformers>=5.0.0",
     "jupyterlab>=4.4.7",
 ]
+
+[tool.uv]
+dev-dependencies = [
+    "pre-commit>=4.3.0",
+]
