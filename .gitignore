@@ -12,5 +12,6 @@ datasets/*
 **local_syftbox_network
 **.server
 **.syftbox
+**.claude
 
 **__pycache__
