@@ -1,0 +1,40 @@
+# SAFER-Bench Baseline Configuration
+baseline:
+  retriever: FAISS-IVF
+  merger: RRF
+  llm: Qwen2.5-0.5B
+  privacy: none
+  num_data_owners: 2
+  approval_rate: 1.0
+  top_k: 5
+
+dimensions_to_vary:
+  retriever:
+    - FAISS-IVF
+    - FAISS-HNSW
+    - BM25
+    - Hybrid
+  merger:
+    - RRF
+    - Score-avg
+    - Borda
+    - CombMNZ
+  llm:
+    - Qwen2.5-0.5B
+    - BioMistral-7B-Q4
+    - SmolLM2-360M
+  privacy:
+    - none
+    - DP-1.0
+    - DP-0.1
+    - k-anon-5
+  num_data_owners:
+    - 2
+    - 3
+    - 5
+    - 10
+  approval_rate:
+    - 0.5
+    - 0.7
+    - 0.9
+    - 1.0
