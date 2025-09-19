@@ -5,10 +5,11 @@
 
 .DS_Store
 
-
 **local_syftbox_network
 **.server
 **.syftbox
 **.claude
 
 **__pycache__
+
+logs/

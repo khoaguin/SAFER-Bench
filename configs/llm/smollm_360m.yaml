@@ -1,0 +1,6 @@
+# SmolLM 360M configuration
+model: "HuggingFaceTB/SmolLM2-360M"
+device: "auto"  # Automatically use CUDA/MPS/CPU based on availability
+max_new_tokens: 10
+temperature: 0.7
+category: "general"

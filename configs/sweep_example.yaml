@@ -1,0 +1,33 @@
+# Example Hydra sweep configuration for benchmarking experiments
+# Run with: python src/safer_bench/main.py --multirun --config-name sweep_example
+
+defaults:
+  - override hydra/sweeper: basic
+  - _self_
+
+hydra:
+  sweeper:
+    params:
+      # Sweep over retrievers from README experimental matrix
+      retriever: faiss_ivf,faiss_hnsw,bm25,hybrid
+
+      # Sweep over mergers
+      merger: rrf,score_avg,borda,combmnz
+
+      # Sweep over LLMs
+      llm: qwen_small,biomistral_7b,smollm_360m
+
+      # Sweep over privacy mechanisms
+      privacy: none,dp_1.0,dp_0.1,k_anon_5
+
+      # Sweep over federation configurations
+      federation: local_2do,local_3do,local_5do,local_10do
+
+      # Sweep over approval rates
+      approval.percentage: 0.5,0.7,0.9,1.0
+
+      # Sweep over retrieval parameters
+      retrieval.k_nn: 1,5,10,20
+
+# This would generate 4*4*3*4*4*4*4 = 12,288 experiments!
+# In practice, you'd run smaller focused sweeps

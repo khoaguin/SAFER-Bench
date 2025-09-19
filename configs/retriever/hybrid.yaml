@@ -1,0 +1,14 @@
+# Hybrid retriever configuration (Dense + Sparse)
+type: "Hybrid"
+# Dense component
+dense:
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  embedding_dimension: 384
+  metric: "cosine"
+# Sparse component
+sparse:
+  type: "BM25"
+  k1: 1.2
+  b: 0.75
+# Fusion weight (0.0 = only sparse, 1.0 = only dense)
+alpha: 0.5

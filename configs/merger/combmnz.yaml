@@ -1,0 +1,3 @@
+# CombMNZ merger (score combination with boost)
+type: "CombMNZ"
+boost_factor: 2.0  # Boost for documents retrieved by multiple DOs

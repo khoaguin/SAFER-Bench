@@ -1,0 +1,17 @@
+# Local federation setup with 3 Data Owners
+name: local_3do
+num_data_owners: 3
+corpus_names: "statpearls|textbooks|pubmed"
+
+# Email addresses for the federation participants
+aggregator: "ds@saferbench.com"
+datasites:
+  - "do1@saferbench.com"
+  - "do2@saferbench.com"
+  - "do3@saferbench.com"
+
+# Local setup configuration
+setup:
+  mode: "local"
+  root_dir: "."
+  network_key: "saferbench_network"

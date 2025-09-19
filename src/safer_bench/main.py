@@ -1,86 +1,104 @@
 #!/usr/bin/env python3
 """Main entry point for SAFER-Bench pipeline."""
 
-import argparse
 from pathlib import Path
 
+import hydra
+from omegaconf import DictConfig
+
 from safer_bench.logging import logger, setup_logging
-from safer_bench.config.benchmark_config import BenchmarkConfig
+
+# Get the project root directory
+PROJECT_ROOT = Path(__file__).parents[2]
+CONFIG_PATH = str(PROJECT_ROOT / "configs")
 
 
-def display_config(config: BenchmarkConfig):
+def display_config(cfg: DictConfig):
     """Display the loaded configuration."""
     logger.info("=" * 80)
     logger.info("SAFER-BENCH CONFIGURATION")
     logger.info("=" * 80)
 
-    logger.info("📋 BASELINE CONFIGURATION:")
-    logger.info("-" * 40)
-    for field, value in config.baseline.model_dump().items():
-        logger.info(f"  {field:<20}: {value}")
+    logger.info("🌐 FEDERATION:")
+    logger.info(f"  Mode: {cfg.federation.setup.mode}")
+    logger.info(f"  Aggregator: {cfg.federation.aggregator}")
+    logger.info(f"  Data Owners: {', '.join(cfg.federation.datasites)}")
+    logger.info(f"  Corpora: {cfg.federation.corpus_names}")
 
-    logger.info("🔄 DIMENSIONS TO VARY:")
-    logger.info("-" * 40)
-    for dimension, values in config.dimensions_to_vary.items():
-        logger.info(f"  {dimension:<20}: {values}")
+    logger.info("🔍 RETRIEVER:")
+    logger.info(f"  Type: {cfg.retriever.type}")
+    logger.info(f"  Embedding: {cfg.retriever.embedding_model}")
+    logger.info(f"  k-NN: {cfg.retrieval.k_nn}")
+
+    logger.info("🤖 LLM:")
+    logger.info(f"  Model: {cfg.llm.model}")
+    logger.info(f"  Device: {cfg.llm.device}")
+
+    logger.info("🔒 PRIVACY:")
+    logger.info(f"  Type: {cfg.privacy.type}")
 
     logger.info("=" * 80)
 
 
-def run_pipeline(config_path: Path):
+def setup_local_federation(cfg: DictConfig):
+    """Set up local federation with RDS."""
+    from pathlib import Path
+    from syft_rds.orchestra import setup_rds_server
+
+    logger.info("🚀 Setting up local federation...")
+
+    # Initialize DS server
+    ds_stack = setup_rds_server(
+        email=cfg.federation.aggregator,
+        root_dir=Path(cfg.federation.setup.root_dir),
+        key=cfg.federation.setup.network_key,
+    )
+
+    # Connect to DOs as guest
+    do_clients = []
+    for do_email in cfg.federation.datasites:
+        client = ds_stack.init_session(host=do_email)
+        do_clients.append(client)
+        logger.info(f"✅ Connected to {do_email}")
+
+    return ds_stack, do_clients
+
+
+def run_pipeline(cfg: DictConfig):
     """Run the SAFER-Bench pipeline."""
     setup_logging()
 
-    # Add context for this pipeline run
-    with logger.contextualize(config_file=str(config_path)):
-        logger.info("🚀 Starting SAFER-Bench pipeline")
-        logger.debug(f"Configuration path: {config_path.absolute()}")
+    logger.info("🚀 Starting SAFER-Bench pipeline")
 
-        try:
-            # Load configuration
-            logger.info("📁 Loading configuration...")
-            config = BenchmarkConfig.from_yaml(config_path)
-            logger.success("✅ Configuration loaded successfully")
+    try:
+        # Display configuration
+        display_config(cfg)
 
-            # Display configuration
-            display_config(config)
+        if cfg.federation.setup.mode == "local":
+            # Set up local federation
+            # ds_stack, do_clients = setup_local_federation(cfg)
 
             # TODO: Add actual pipeline execution here
             logger.info("🔨 Pipeline execution would happen here...")
             logger.info("   - Initialize retrievers")
-            logger.info("   - Setup data owners")
-            logger.info("   - Run experiments")
+            logger.info("   - Submit jobs to data owners")
+            logger.info("   - Run federated experiments")
             logger.info("   - Collect metrics")
+        else:
+            logger.info("🌍 Distributed federation mode not yet implemented")
 
-            logger.success("✨ Pipeline completed successfully!")
+        logger.success("✨ Pipeline completed successfully!")
 
-        except FileNotFoundError:
-            logger.error(f"❌ Configuration file not found: {config_path}")
-            raise
-        except Exception:
-            logger.exception("❌ Pipeline failed with unexpected error")
-            raise
+    except Exception:
+        logger.exception("❌ Pipeline failed with unexpected error")
+        raise
 
 
-def main():
-    """Main entry point."""
-    parser = argparse.ArgumentParser(description="SAFER-Bench Pipeline")
-    parser.add_argument(
-        "--config",
-        type=Path,
-        default=Path("configs/baseline.yaml"),
-        help="Path to configuration file (default: configs/baseline.yaml)",
-    )
-
-    args = parser.parse_args()
-
-    if not args.config.exists():
-        print(f"❌ Configuration file not found: {args.config}")
-        return 1
-
-    run_pipeline(args.config)
-    return 0
+@hydra.main(version_base=None, config_path=CONFIG_PATH, config_name="config")
+def main(cfg: DictConfig) -> None:
+    """Main entry point with Hydra."""
+    run_pipeline(cfg)
 
 
 if __name__ == "__main__":
-    exit(main())
+    main()

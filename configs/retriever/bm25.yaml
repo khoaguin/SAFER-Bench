@@ -1,0 +1,5 @@
+# BM25 sparse retriever configuration
+type: "BM25"
+# BM25 specific parameters
+k1: 1.2  # Term frequency saturation parameter
+b: 0.75  # Length normalization parameter

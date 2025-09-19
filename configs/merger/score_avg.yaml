@@ -1,0 +1,4 @@
+# Score-based averaging merger
+type: "ScoreAvg"
+normalization: "min-max"  # min-max, z-score, or none
+weights: null  # Equal weights if null

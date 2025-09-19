@@ -1,0 +1,6 @@
+# Differential Privacy with epsilon=0.1 (strong privacy)
+enabled: true
+type: "differential_privacy"
+epsilon: 0.1
+delta: 1e-5
+mechanism: "gaussian"  # gaussian or laplace

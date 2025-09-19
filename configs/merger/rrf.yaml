@@ -1,0 +1,3 @@
+# Reciprocal Rank Fusion merger
+type: "RRF"
+k_rrf: 60  # Constant for RRF formula

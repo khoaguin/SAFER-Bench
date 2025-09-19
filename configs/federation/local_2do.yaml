@@ -1,0 +1,16 @@
+# Local federation setup with 2 Data Owners
+name: local_2do
+num_data_owners: 2
+corpus_names: "statpearls|textbooks"
+
+# Email addresses for the federation participants
+aggregator: "ds@saferbench.com"
+datasites:
+  - "do1@saferbench.com"
+  - "do2@saferbench.com"
+
+# Local setup configuration
+setup:
+  mode: "local"  # local or distributed
+  root_dir: "."
+  network_key: "saferbench_network"

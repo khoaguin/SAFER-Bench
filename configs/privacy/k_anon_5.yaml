@@ -1,0 +1,5 @@
+# K-anonymity with k=5
+enabled: true
+type: "k_anonymity"
+k: 5
+min_result_set: 5

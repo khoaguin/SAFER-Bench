@@ -20,13 +20,19 @@ _nc := '\033[0m'
 
 # ---------------------------------------------------------------------------------------------------------------------
 
-# Run the SAFER-Bench pipeline with default config
-run config="configs/baseline.yaml":
+# Run SAFER-Bench pipeline
+run:
     echo "{{_cyan}}🚀 Running SAFER-Bench pipeline...{{_nc}}"
-    uv run safer-bench --config {{config}}
+    uv run safer-bench
 
+# Show current configuration
+show-config:
+    echo "{{_cyan}}📋 Current configuration:{{_nc}}"
+    uv run safer-bench --cfg job
+
+# Clean build artifacts
 clean:
     echo "{{_yellow}}🧹 Cleaning up...{{_nc}}"
-    rm -rf outputs/* logs/*
+    rm -rf outputs/ multirun/ logs/
     find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
     echo "{{_green}}✅ Cleaned{{_nc}}"

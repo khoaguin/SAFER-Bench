@@ -1,0 +1,67 @@
+defaults:
+  - federation: local_2do
+  - retriever: faiss_ivf
+  - merger: rrf
+  - llm: qwen_small
+  - privacy: none
+  - _self_
+
+# QA Datasets
+qa:
+  datasets: "pubmedqa|bioasq"
+  num_questions: 100  # Number of questions per dataset
+  query_types: ["factual", "reasoning", "comparative"]  # From README
+
+# Retrieval parameters
+retrieval:
+  k_nn: 8  # k-nearest neighbors (can sweep: 1, 5, 10, 20)
+  chunk_size: 512  # Chunk size (can sweep: 256, 512, 1024)
+  chunk_overlap: 50  # Overlap (can sweep: 0, 50, 100)
+  similarity_metric: "cosine"  # cosine, L2, inner_product
+
+# DO Approval settings
+approval:
+  percentage: 1.0  # 1.0 = 100% approval (can sweep: 0.25, 0.5, 0.75, 1.0)
+  mechanism: "static"  # static, dynamic, consensus
+
+# Evaluation settings
+evaluation:
+  # Quality metrics
+  retrieval_metrics:
+    - precision_at_k
+    - recall_at_k
+    - mrr
+    - ndcg
+  generation_metrics:
+    - rouge
+    - bertscore
+    - exact_match
+    - answer_correctness
+    - faithfulness
+    - relevance
+  # Efficiency metrics
+  efficiency_metrics:
+    - retrieval_time
+    - merge_time
+    - generation_time
+    - queries_per_second
+    - memory_usage
+  # Privacy-utility metrics
+  privacy_metrics:
+    - approval_rate
+    - accuracy_drop_with_privacy
+
+  seed: 42
+  output_dir: "results/${federation.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}"
+
+# Hydra configuration
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
+  job_logging:
+    formatters:
+      simple:
+        format: '[%(levelname)s] - %(message)s'

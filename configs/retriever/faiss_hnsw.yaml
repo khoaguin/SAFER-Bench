@@ -1,0 +1,9 @@
+# FAISS HNSW retriever configuration
+type: "FAISS-HNSW"
+metric: "cosine"
+embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+embedding_dimension: 384
+batch_size: 32
+# HNSW specific parameters
+hnsw_m: 16  # Number of bi-directional links
+hnsw_ef: 50  # Size of dynamic candidate list

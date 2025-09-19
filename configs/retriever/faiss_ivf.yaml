@@ -1,0 +1,6 @@
+# FAISS retriever configuration
+type: "FAISS-IVF"
+metric: "L2"  # FAISS METRIC_L2
+embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+embedding_dimension: 384
+batch_size: 32

@@ -1,40 +1,51 @@
 # SAFER-Bench Baseline Configuration
-baseline:
-  retriever: FAISS-IVF
-  merger: RRF
-  llm: Qwen2.5-0.5B
-  privacy: none
-  num_data_owners: 2
-  approval_rate: 1.0
-  top_k: 5
+# Based on FedRAG v1 implementation
 
-dimensions_to_vary:
-  retriever:
-    - FAISS-IVF
-    - FAISS-HNSW
-    - BM25
-    - Hybrid
-  merger:
-    - RRF
-    - Score-avg
-    - Borda
-    - CombMNZ
-  llm:
-    - Qwen2.5-0.5B
-    - BioMistral-7B-Q4
-    - SmolLM2-360M
-  privacy:
-    - none
-    - DP-1.0
-    - DP-0.1
-    - k-anon-5
-  num_data_owners:
-    - 2
-    - 3
-    - 5
-    - 10
-  approval_rate:
-    - 0.5
-    - 0.7
-    - 0.9
-    - 1.0
+# QA Datasets
+qa_datasets: "pubmedqa|bioasq"
+qa_num: 100  # Number of questions per dataset
+
+# Retrieval configuration (from FedRAG)
+retriever:
+  type: "FAISS-IVF"
+  metric: "L2"  # FAISS METRIC_L2
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  embedding_dimension: 384
+  batch_size: 32
+
+# Document merging
+merger:
+  type: "RRF"  # Reciprocal Rank Fusion
+  k_rrf: 60  # From FedRAG pyproject.toml
+
+# Language Model
+llm:
+  model: "HuggingFaceTB/SmolLM2-1.7B-Instruct"  # From FedRAG
+  use_gpu: false
+  max_new_tokens: 10
+
+# Federation settings
+federation:
+  num_data_owners: 2  # From FedRAG (2 supernodes)
+  corpus_names: "statpearls|textbooks"  # From FedRAG
+  aggregator: "ds@openmined.org"
+  datasites:
+    - "do1@openmined.org"
+    - "do2@openmined.org"
+
+# Retrieval parameters
+retrieval:
+  k_nn: 8  # k-nearest neighbors from FedRAG
+  nlist: auto  # sqrt(n_embeddings) for IVF clusters
+
+# No privacy in baseline
+privacy: none
+
+# Evaluation settings
+evaluation:
+  metrics:
+    - accuracy  # Answer correctness
+    - answered_ratio  # Questions answered vs total
+    - mean_query_time  # Average time per query
+  seed: 42
+  output_dir: "results/baseline/"

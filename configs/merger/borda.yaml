@@ -1,0 +1,3 @@
+# Borda count merger (voting-based)
+type: "Borda"
+weighting: "linear"  # linear or exponential
