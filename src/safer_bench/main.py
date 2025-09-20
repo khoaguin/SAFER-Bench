@@ -7,6 +7,7 @@ import hydra
 from omegaconf import DictConfig
 
 from safer_bench.logging import logger, setup_logging
+from safer_bench.utils import get_device
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).parents[2]
@@ -32,7 +33,8 @@ def display_config(cfg: DictConfig):
 
     logger.info("🤖 LLM:")
     logger.info(f"  Model: {cfg.llm.model}")
-    logger.info(f"  Device: {cfg.llm.device}")
+    actual_device = get_device(cfg.llm.device)
+    logger.info(f"  Device config: {cfg.llm.device} → Using: {actual_device}")
 
     logger.info("🔒 PRIVACY:")
     logger.info(f"  Type: {cfg.privacy.type}")
