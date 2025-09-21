@@ -271,10 +271,11 @@ class BenchmarkRunner:
 ### Configuration
 - Federation: {self.cfg.federation.name}
 - Data Owners: {self.cfg.federation.num_data_owners}
-- Retriever: {self.cfg.retriever.name}
-- LLM: {self.cfg.llm.name}
-- Merger: {self.cfg.merger.name}
-- Approval Rate: {self.cfg.approval.percentage * 100}%
+- Retriever: {self.cfg.retriever.type}
+- LLM: {self.cfg.llm.model}
+- Merger: {self.cfg.merger.type}
+- Dataset Mode: {"Subset" if self.cfg.dataset.use_subset else "Full"}
+- Approval Rate: {self.cfg.federation.approval.percentage * 100}%
 
 ### Results
 - Accuracy: {metrics.get('accuracy', 'N/A')}

@@ -6,6 +6,9 @@ defaults:
   - privacy: none
   - _self_
 
+dataset:
+  use_subset: false  # Default to full datasets
+
 # QA Datasets
 qa:
   datasets: "pubmedqa|bioasq"
@@ -47,7 +50,7 @@ evaluation:
     - accuracy_drop_with_privacy
 
   seed: 42
-  output_dir: "results/${federation.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}"
+  output_dir: "outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}/${federation.name}"
 
 # Hydra configuration
 hydra:

@@ -17,3 +17,7 @@ datasets/*
 logs/
 
 outputs/
+multirun/
+results/
+
+**safer_bench_network

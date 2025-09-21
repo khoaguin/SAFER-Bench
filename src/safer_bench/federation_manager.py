@@ -16,6 +16,9 @@ from syft_rds.orchestra import setup_rds_server, remove_rds_stack_dir, SingleRDS
 from syft_core import Client as SyftBoxClient
 
 
+SAFER_BENCH_SYFTBOX_NETWORK = "safer_bench_network"
+
+
 class DataOwnerInfo(BaseModel):
     """Information about a data owner in the federation."""
 
@@ -47,13 +50,15 @@ class FederationManager:
             cfg: Hydra configuration object
         """
         self.cfg = cfg
-        self.network_key = "safer_bench_network"
+        self.network_key = SAFER_BENCH_SYFTBOX_NETWORK
         # Use project root directory (safer-bench/) regardless of where script is run from
         self.root_dir = Path(__file__).parents[2]
 
         # Parse federation configuration
         self.aggregator_email = cfg.federation.aggregator
         self.data_owners = self._parse_data_owners()  # List[DataOwnerInfo]
+        self.use_subset = cfg.dataset.use_subset  # Cache for easy access
+
         # Runtime state tracked separately
         self.ds_stack: Optional[SingleRDSStack] = None
         self.ds_client: Optional[SyftBoxClient] = None
