@@ -14,7 +14,12 @@ do1:
 do2:
   email: "do2@saferbench.com"
   dataset: "textbooks"
-  data_fraction: 0.2  # 20% of textbooks dataset
+  data_fraction: 0.1  # 10% of textbooks dataset
+
+# Federation approval behavior
+approval:
+  percentage: 1.0  # 100% approval rate (can sweep: 0.25, 0.5, 0.75, 1.0)
+  mechanism: "static"  # static, dynamic, consensus
 
 # Local setup configuration
 setup:

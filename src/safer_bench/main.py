@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Main entry point for SAFER-Bench pipeline."""
+"""Main entry point for SaferBench federated RAG benchmarking."""
 
+import asyncio
 from pathlib import Path
 
 import hydra
 from omegaconf import DictConfig
+from loguru import logger
 
-from safer_bench.logging import logger, setup_logging
-from safer_bench.utils import get_device
+from safer_bench.benchmark_runner import BenchmarkRunner
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).parents[2]
@@ -15,91 +16,63 @@ CONFIG_PATH = str(PROJECT_ROOT / "configs")
 
 
 def display_config(cfg: DictConfig):
-    """Display the loaded configuration."""
-    logger.info("=" * 80)
-    logger.info("SAFER-BENCH CONFIGURATION")
-    logger.info("=" * 80)
-
-    logger.info("🌐 FEDERATION:")
-    logger.info(f"  Mode: {cfg.federation.setup.mode}")
-    logger.info(f"  Aggregator: {cfg.federation.aggregator}")
-    logger.info(f"  Data Owners: {', '.join(cfg.federation.datasites)}")
-    logger.info(f"  Corpora: {cfg.federation.corpus_names}")
-
-    logger.info("🔍 RETRIEVER:")
-    logger.info(f"  Type: {cfg.retriever.type}")
-    logger.info(f"  Embedding: {cfg.retriever.embedding_model}")
-    logger.info(f"  k-NN: {cfg.retrieval.k_nn}")
-
-    logger.info("🤖 LLM:")
-    logger.info(f"  Model: {cfg.llm.model}")
-    actual_device = get_device(cfg.llm.device)
-    logger.info(f"  Device config: {cfg.llm.device} → Using: {actual_device}")
-
-    logger.info("🔒 PRIVACY:")
-    logger.info(f"  Type: {cfg.privacy.type}")
+    """Display the loaded configuration in a clean, robust format."""
+    from omegaconf import OmegaConf
 
     logger.info("=" * 80)
+    logger.info("SAFERBENCH CONFIGURATION")
+    logger.info("=" * 80)
+
+    # Convert to YAML string for clean display
+    config_yaml = OmegaConf.to_yaml(cfg, resolve=True)
+
+    # Add emoji sections for better readability
+    formatted_config = config_yaml
+    formatted_config = formatted_config.replace("federation:", "🌐 federation:")
+    formatted_config = formatted_config.replace("retriever:", "🔍 retriever:")
+    formatted_config = formatted_config.replace("merger:", "🔗 merger:")
+    formatted_config = formatted_config.replace("llm:", "🤖 llm:")
+    formatted_config = formatted_config.replace("privacy:", "🔒 privacy:")
+    formatted_config = formatted_config.replace("retrieval:", "📏 retrieval:")
+    formatted_config = formatted_config.replace("qa:", "❓ qa:")
+    formatted_config = formatted_config.replace("evaluation:", "📊 evaluation:")
+    formatted_config = formatted_config.replace("hydra:", "⚙️  hydra:")
+
+    # Log the formatted config
+    for line in formatted_config.split("\n"):
+        if line.strip():  # Skip empty lines
+            logger.info(line)
+
+    logger.info("=" * 80)
 
 
-def setup_local_federation(cfg: DictConfig):
-    """Set up local federation with RDS."""
-    from pathlib import Path
-    from syft_rds.orchestra import setup_rds_server
-
-    logger.info("🚀 Setting up local federation...")
-
-    # Initialize DS server
-    ds_stack = setup_rds_server(
-        email=cfg.federation.aggregator,
-        root_dir=Path(cfg.federation.setup.root_dir),
-        key=cfg.federation.setup.network_key,
-    )
-
-    # Connect to DOs as guest
-    do_clients = []
-    for do_email in cfg.federation.datasites:
-        client = ds_stack.init_session(host=do_email)
-        do_clients.append(client)
-        logger.info(f"✅ Connected to {do_email}")
-
-    return ds_stack, do_clients
-
-
-def run_pipeline(cfg: DictConfig):
-    """Run the SAFER-Bench pipeline."""
-    setup_logging()
-
-    logger.info("🚀 Starting SAFER-Bench pipeline")
+async def run_benchmark(cfg: DictConfig):
+    """Run the SaferBench federated RAG benchmark."""
+    logger.info("🚀 Starting SaferBench federated RAG benchmark")
 
     try:
         # Display configuration
         display_config(cfg)
 
-        if cfg.federation.setup.mode == "local":
-            # Set up local federation
-            # ds_stack, do_clients = setup_local_federation(cfg)
+        # Create and run benchmark
+        runner = BenchmarkRunner(cfg)
+        # metrics = await runner.run()
 
-            # TODO: Add actual pipeline execution here
-            logger.info("🔨 Pipeline execution would happen here...")
-            logger.info("   - Initialize retrievers")
-            logger.info("   - Submit jobs to data owners")
-            logger.info("   - Run federated experiments")
-            logger.info("   - Collect metrics")
-        else:
-            logger.info("🌍 Distributed federation mode not yet implemented")
+        logger.success("✨ Benchmark completed successfully!")
+        # logger.info(f"📊 Results: {metrics.get('benchmark_metadata', {}).get('benchmark_id', 'N/A')}")
 
-        logger.success("✨ Pipeline completed successfully!")
+        # return metrics
 
-    except Exception:
-        logger.exception("❌ Pipeline failed with unexpected error")
+    except Exception as e:
+        logger.exception(f"❌ Benchmark failed: {e}")
         raise
 
 
 @hydra.main(version_base=None, config_path=CONFIG_PATH, config_name="config")
 def main(cfg: DictConfig) -> None:
     """Main entry point with Hydra."""
-    run_pipeline(cfg)
+    # Run the async benchmark
+    asyncio.run(run_benchmark(cfg))
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 
 import torch
 
-from safer_bench.logging import logger
+from loguru import logger
 
 
 def get_device(device_config: str = "auto") -> str:

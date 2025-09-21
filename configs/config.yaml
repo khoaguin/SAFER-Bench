@@ -19,11 +19,6 @@ retrieval:
   chunk_overlap: 50  # Overlap (can sweep: 0, 50, 100)
   similarity_metric: "cosine"  # cosine, L2, inner_product
 
-# DO Approval settings
-approval:
-  percentage: 1.0  # 1.0 = 100% approval (can sweep: 0.25, 0.5, 0.75, 1.0)
-  mechanism: "static"  # static, dynamic, consensus
-
 # Evaluation settings
 evaluation:
   # Quality metrics
