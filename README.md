@@ -2,6 +2,7 @@
 
 SAFER-Bench is a comprehensive benchmark framework for evaluating Federated Retrieval-Augmented Generation (RAG) systems with approval-based privacy controls. It enables systematic evaluation of retrieval algorithms, merging strategies, LLMs, and privacy mechanisms in realistic federated settings where Data Owners (DOs) maintain control over their data.
 
+![safer-bench-architecture](./docs/images/architecture.png)
 
 ### Benchmarking Dimensions
 #### Baseline Comparison
