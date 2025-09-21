@@ -1,6 +1,6 @@
-# Local federation setup with 3 Data Owners
-name: local_3do
-num_data_owners: 3
+# Local federation setup with 4 Data Owners
+name: local_4do
+num_data_owners: 4
 
 # Email addresses for the federation participants
 aggregator: "ds@saferbench.com"
@@ -14,12 +14,17 @@ do1:
 do2:
   email: "do2@saferbench.com"
   dataset: "textbooks"
-  data_fraction: 0.15  # 15% of textbooks dataset
+  data_fraction: 0.1  # 10% of textbooks dataset
 
 do3:
   email: "do3@saferbench.com"
   dataset: "mimic-iv-note"
-  data_fraction: 0.05  # 5% of mimic-iv-note dataset
+  data_fraction: 0.1  # 10% of mimic-iv-note dataset
+
+do4:
+  email: "do4@saferbench.com"
+  dataset: "mimic-iv-bhc"
+  data_fraction: 0.1  # 10% of mimic-iv-bhc dataset
 
 # Local setup configuration
 setup:

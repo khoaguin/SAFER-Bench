@@ -1,7 +1,9 @@
 **.venv
 
-# Ignore all files in datasets directory
-**/datasets
+# Ignore all files in datasets except README.md and dataset_download.ipynb
+datasets/*
+!datasets/README.md
+!datasets/dataset_download.ipynb
 
 .DS_Store
 
