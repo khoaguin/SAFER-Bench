@@ -31,6 +31,16 @@ run:
     @echo -e "{{_green}}🔬 Running SAFER-Bench in FULL mode (complete)...{{_nc}}"
     uv run python src/safer_bench/main.py dataset.use_subset=false
 
+# Development: run with inspection (keep directories for debugging)
+run-inspect:
+    @echo -e "{{_yellow}}🔍 Running SAFER-Bench with directories kept for inspection...{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=true runtime.clean=false
+
+# Production: run with inspection (keep directories for debugging)
+run-inspect-full:
+    @echo -e "{{_yellow}}🔍 Running SAFER-Bench FULL mode with directories kept for inspection...{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=false runtime.clean=false
+
 # Development sweep: quick parameter exploration with subsets
 sweep-dry:
     @echo -e "{{_cyan}}🔍 Running parameter sweep in SUBSET mode...{{_nc}}"

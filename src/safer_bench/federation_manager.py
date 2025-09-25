@@ -125,7 +125,7 @@ class FederationManager:
         try:
             # Clean up RDS stacks (safe to call even if none exist)
             try:
-                remove_rds_stack_dir(self.root_dir, key=self.network_key)
+                remove_rds_stack_dir(root_dir=self.root_dir, key=self.network_key)
                 logger.debug("Cleaned up SyftBox directories")
             except Exception as e:
                 logger.debug(f"No SyftBox directories to clean: {e}")
@@ -306,6 +306,7 @@ class FederationManager:
         logger.info("Federation Summary:")
         logger.info(f"  Aggregator: {self.aggregator_email}")
         logger.info(f"  Network Key: {self.network_key}")
+        logger.info(f"  Network Directory: {self.root_dir / self.network_key}")
         logger.info(f"  Data Owners ({len(self.data_owners)}):")
 
         for i, do_info in enumerate(self.data_owners, 1):

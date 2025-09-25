@@ -124,8 +124,16 @@ class BenchmarkRunner:
             logger.error(f"❌ Benchmark failed: {e}")
             raise
         finally:
-            # Cleanup
-            await self.federation_manager.cleanup()
+            # Conditional cleanup based on configuration
+            should_clean = self.cfg.get("runtime", {}).get("clean", True)
+            if should_clean:
+                logger.info("🧹 Cleaning up federation directories...")
+                await self.federation_manager.cleanup()
+            else:
+                logger.info("🔍 Keeping federation directories for inspection")
+                logger.info(
+                    f"   Network directory: {self.federation_manager.root_dir / self.federation_manager.network_key}"
+                )
 
     async def _submit_jobs(self, fedrag_project: Path, federation_info: Dict) -> list:
         """Submit FedRAG jobs to all data owners.

@@ -9,6 +9,10 @@ defaults:
 dataset:
   use_subset: false  # Default to full datasets
 
+# Runtime behavior
+runtime:
+  clean: true  # Cleanup federation directories after run (set to false to keep for inspection)
+
 # QA Datasets
 qa:
   datasets: "pubmedqa|bioasq"
