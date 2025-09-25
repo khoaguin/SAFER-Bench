@@ -9,47 +9,11 @@ from omegaconf import DictConfig
 from loguru import logger
 
 from safer_bench.benchmark_runner import BenchmarkRunner
+from safer_bench.utils import display_config
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).parents[2]
 CONFIG_PATH = str(PROJECT_ROOT / "configs")
-
-
-def display_config(cfg: DictConfig):
-    """Display the loaded configuration in a clean, robust format."""
-    from omegaconf import OmegaConf
-
-    logger.info("=" * 80)
-
-    # Highlight dataset mode prominently
-    mode = (
-        "🚀 SUBSET MODE (Fast)" if cfg.dataset.use_subset else "🔬 FULL MODE (Complete)"
-    )
-    logger.critical(f"SAFERBENCH CONFIGURATION - {mode}")
-    logger.info("=" * 80)
-
-    # Convert to YAML string for clean display
-    config_yaml = OmegaConf.to_yaml(cfg, resolve=True)
-
-    # Add emoji sections for better readability
-    formatted_config = config_yaml
-    formatted_config = formatted_config.replace("dataset:", "💾 dataset:")
-    formatted_config = formatted_config.replace("federation:", "🌐 federation:")
-    formatted_config = formatted_config.replace("retriever:", "🔍 retriever:")
-    formatted_config = formatted_config.replace("merger:", "🔗 merger:")
-    formatted_config = formatted_config.replace("llm:", "🤖 llm:")
-    formatted_config = formatted_config.replace("privacy:", "🔒 privacy:")
-    formatted_config = formatted_config.replace("retrieval:", "📏 retrieval:")
-    formatted_config = formatted_config.replace("qa:", "❓ qa:")
-    formatted_config = formatted_config.replace("evaluation:", "📊 evaluation:")
-    formatted_config = formatted_config.replace("hydra:", "⚙️  hydra:")
-
-    # Log the formatted config
-    for line in formatted_config.split("\n"):
-        if line.strip():  # Skip empty lines
-            logger.info(line)
-
-    logger.info("=" * 80)
 
 
 async def run_benchmark(cfg: DictConfig):

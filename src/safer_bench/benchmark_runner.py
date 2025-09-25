@@ -43,7 +43,6 @@ class BenchmarkRunner:
         """
         self.start_time = datetime.now()
         logger.info(f"🚀 Starting SaferBench run: {self.benchmark_id}")
-        logger.info(f"Configuration: {OmegaConf.to_yaml(self.cfg)}")
 
         try:
             # Stage 1: Setup federation
