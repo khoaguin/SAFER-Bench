@@ -26,7 +26,6 @@ class BenchmarkRunner:
         """
         self.cfg = cfg
         self.federation_manager = FederationManager(cfg)
-        # self.data_distributor = DataDistributor(cfg)
         # self.fedrag_adapter = FedRAGAdapter(cfg)
         # self.metrics_collector = MetricsCollector(cfg)
 
@@ -54,12 +53,12 @@ class BenchmarkRunner:
                 f"✅ Federation ready with {len(federation_info['dos'])} data owners"
             )
 
-            # # Stage 2: Distribute datasets
-            # logger.info("=" * 60)
-            # logger.info("Stage 2/7: Distributing datasets to data owners")
-            # logger.info("=" * 60)
-            # dataset_info = await self.data_distributor.distribute_datasets(federation_info)
-            # logger.success(f"✅ Datasets distributed: {dataset_info}")
+            # Stage 2: Distribute datasets
+            logger.info("=" * 60)
+            logger.info("Stage 2/7: Data owners create datasets")
+            logger.info("=" * 60)
+            # TODO: DOS create Syft datasets here
+            logger.success("✅ Datasets info: ")
 
             # # Stage 3: Prepare fedrag with injected parameters
             # logger.info("=" * 60)

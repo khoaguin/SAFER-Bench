@@ -12,8 +12,9 @@ from omegaconf import DictConfig
 from loguru import logger
 from pydantic import BaseModel, Field, EmailStr, field_validator
 
-from syft_rds.orchestra import setup_rds_server, remove_rds_stack_dir, SingleRDSStack
 from syft_core import Client as SyftBoxClient
+from syft_rds.orchestra import setup_rds_server, remove_rds_stack_dir, SingleRDSStack
+from syft_rds.client.rds_client import RDSClient
 
 
 SAFER_BENCH_SYFTBOX_NETWORK = "safer_bench_network"
@@ -55,15 +56,17 @@ class FederationManager:
         self.root_dir = Path(__file__).parents[2]
 
         # Parse federation configuration
-        self.aggregator_email = cfg.federation.aggregator
-        self.data_owners = self._parse_data_owners()  # List[DataOwnerInfo]
-        self.use_subset = cfg.dataset.use_subset  # Cache for easy access
+        self.aggregator_email: str = cfg.federation.aggregator
+        self.data_owners: List[DataOwnerInfo] = self._parse_data_owners()
+        self.use_subset: bool = cfg.dataset.use_subset
 
         # Runtime state tracked separately
         self.ds_stack: Optional[SingleRDSStack] = None
-        self.ds_client: Optional[SyftBoxClient] = None
-        self.do_stacks: Dict[str, SingleRDSStack] = {}  # email -> stack
-        self.do_clients: Dict[str, SyftBoxClient] = {}  # email -> client
+        self.ds_client: Optional[RDSClient] = None
+        self.do_stacks: Dict[
+            str, SingleRDSStack
+        ] = {}  # { client_email: SingleRDSStack }
+        self.do_clients: Dict[str, RDSClient] = {}  # { client_email: RDSClient }
         self.is_setup = False
 
     # Public Methods
