@@ -46,51 +46,70 @@ class BenchmarkRunner:
         try:
             # Stage 1: Setup federation
             logger.info("=" * 60)
-            logger.info("Stage 1/7: Setting up federation")
+            logger.info("\033[38;5;209mStage 1/7: Setting up federation\033[0m")
             logger.info("=" * 60)
             federation_info = await self.federation_manager.setup()
             logger.success(
                 f"✅ Federation ready with {len(federation_info['dos'])} data owners"
             )
 
-            # Stage 2: Distribute datasets
+            # Stage 2: Data owners create datasets
             logger.info("=" * 60)
-            logger.info("Stage 2/7: Data owners create datasets")
+            logger.info("\033[38;5;209mStage 2/7: Data owners create datasets\033[0m")
             logger.info("=" * 60)
-            # TODO: DOS create Syft datasets here
-            logger.success("✅ Datasets info: ")
+
+            datasets_upload_info = await self.federation_manager.upload_datasets()
+
+            # Log results
+            if datasets_upload_info["success_count"] > 0:
+                logger.success(
+                    f"✅ Datasets uploaded: {datasets_upload_info['success_count']}/{datasets_upload_info['total']} successful"
+                )
+                for result in datasets_upload_info["successful"]:
+                    logger.info(
+                        f"  ✅ {result['do_email']}: {result['dataset_name']} ({result['data_fraction']*100}% data)"
+                    )
+
+            if datasets_upload_info["failure_count"] > 0:
+                logger.error(
+                    f"❌ {datasets_upload_info['failure_count']} dataset uploads failed"
+                )
+                for result in datasets_upload_info["failed"]:
+                    logger.error(
+                        f"  ❌ {result['do_email']}: {result.get('error', 'Unknown error')}"
+                    )
 
             # # Stage 3: Prepare fedrag with injected parameters
             # logger.info("=" * 60)
-            # logger.info("Stage 3/7: Preparing FedRAG with benchmark parameters")
+            # logger.info("\033[38;5;209mStage 3/7: Preparing FedRAG with benchmark parameters\033[0m")
             # logger.info("=" * 60)
             # fedrag_project = await self.fedrag_adapter.prepare_project()
             # logger.success(f"✅ FedRAG project prepared at: {fedrag_project}")
 
             # # Stage 4: Submit jobs to data owners
             # logger.info("=" * 60)
-            # logger.info("Stage 4/7: Submitting FedRAG jobs to data owners")
+            # logger.info("\033[38;5;209mStage 4/7: Submitting FedRAG jobs to data owners\033[0m")
             # logger.info("=" * 60)
             # jobs = await self._submit_jobs(fedrag_project, federation_info)
             # logger.success(f"✅ Submitted {len(jobs)} jobs")
 
             # # Stage 5: Process approvals based on approval rate
             # logger.info("=" * 60)
-            # logger.info("Stage 5/7: Processing job approvals")
+            # logger.info("\033[38;5;209mStage 5/7: Processing job approvals\033[0m")
             # logger.info("=" * 60)
             # approval_results = await self._process_approvals(jobs, federation_info)
             # logger.success(f"✅ Approved {approval_results['approved']}/{len(jobs)} jobs")
 
             # # Stage 6: Run federated RAG
             # logger.info("=" * 60)
-            # logger.info("Stage 6/7: Running Federated RAG")
+            # logger.info("\033[38;5;209mStage 6/7: Running Federated RAG\033[0m")
             # logger.info("=" * 60)
             # fedrag_results = await self._run_fedrag(federation_info, approval_results)
             # logger.success(f"✅ FedRAG execution complete")
 
             # # Stage 7: Collect and save metrics
             # logger.info("=" * 60)
-            # logger.info("Stage 7/7: Collecting metrics and generating report")
+            # logger.info("\033[38;5;209mStage 7/7: Collecting metrics and generating report\033[0m")
             # logger.info("=" * 60)
             # metrics = await self.metrics_collector.collect(
             #     fedrag_results,

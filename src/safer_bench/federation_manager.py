@@ -16,6 +16,8 @@ from syft_core import Client as SyftBoxClient
 from syft_rds.orchestra import setup_rds_server, remove_rds_stack_dir, SingleRDSStack
 from syft_rds.client.rds_client import RDSClient
 
+from safer_bench.dataset_utils import get_dataset_path, validate_dataset_exists
+
 
 SAFER_BENCH_SYFTBOX_NETWORK = "safer_bench_network"
 
@@ -199,6 +201,153 @@ class FederationManager:
             await asyncio.sleep(2)
 
         raise TimeoutError(f"Data owners not ready after {timeout} seconds")
+
+    async def upload_datasets(self) -> Dict[str, Any]:
+        """Upload datasets to all data owners concurrently.
+
+        Returns:
+            Dictionary containing upload results with successful and failed uploads
+        """
+        if not self.is_setup:
+            raise RuntimeError("Federation not setup. Call setup() first.")
+
+        logger.info(
+            f"📤 Starting concurrent dataset uploads for {len(self.data_owners)} data owners"
+        )
+
+        # Create upload tasks for all data owners
+        tasks = []
+        for do_info in self.data_owners:
+            task = self._upload_single_dataset(do_info)
+            tasks.append(task)
+
+        # Execute all uploads concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process and categorize results
+        return self._process_upload_results(results)
+
+    async def _upload_single_dataset(self, do_info: DataOwnerInfo) -> Dict[str, Any]:
+        """Upload dataset for a single data owner.
+
+        Args:
+            do_info: DataOwnerInfo object for the data owner
+
+        Returns:
+            Dictionary with upload result information
+        """
+        try:
+            logger.debug(f"📤 Starting dataset upload for {do_info.email}")
+
+            # Validate dataset exists before attempting upload
+            if not validate_dataset_exists(
+                do_info.dataset, self.use_subset, self.root_dir
+            ):
+                raise FileNotFoundError(
+                    f"Dataset {do_info.dataset} not found in {'subset' if self.use_subset else 'full'} mode"
+                )
+
+            # Get dataset paths
+            corpus_path: Path = get_dataset_path(
+                do_info.dataset, self.use_subset, self.root_dir
+            )
+            dataset_name = do_info.dataset
+
+            # Get DO client
+            do_client = self.do_clients[do_info.email]
+
+            # Create Syft dataset
+            logger.debug(f"Creating Syft dataset '{dataset_name}' for {do_info.email}")
+            private_path = corpus_path / "private"
+            mock_path = corpus_path / "mock"
+            if not private_path.exists() or not mock_path.exists():
+                raise FileNotFoundError(
+                    f"Dataset paths not found for {do_info.dataset}"
+                )
+
+            dataset = do_client.dataset.create(
+                name=dataset_name,
+                path=private_path,
+                mock_path=mock_path,
+                description_path=(mock_path / "README.md")
+                if (mock_path / "README.md").exists()
+                else None,
+            )
+
+            logger.success(
+                f"✅ Dataset upload successful for {do_info.email}: {dataset_name}"
+            )
+
+            return {
+                "do_email": do_info.email,
+                "dataset_name": do_info.dataset,
+                "syft_dataset_name": dataset_name,
+                "dataset_object": dataset,
+                "corpus_path": str(corpus_path),
+                "status": "success",
+                "data_fraction": do_info.data_fraction,
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Dataset upload failed for {do_info.email}: {e}")
+            return {
+                "do_email": do_info.email,
+                "dataset_name": do_info.dataset,
+                "status": "failed",
+                "error": str(e),
+                "error_type": type(e).__name__,
+            }
+
+    def _process_upload_results(self, results: List[Any]) -> Dict[str, Any]:
+        """Process and categorize upload results.
+
+        Args:
+            results: List of upload results or exceptions
+
+        Returns:
+            Dictionary with categorized results and summary statistics
+        """
+        successful = []
+        failed = []
+
+        for result in results:
+            # Handle exceptions that occurred during asyncio.gather
+            if isinstance(result, Exception):
+                failed.append(
+                    {
+                        "do_email": "unknown",
+                        "dataset_name": "unknown",
+                        "status": "failed",
+                        "error": str(result),
+                        "error_type": type(result).__name__,
+                    }
+                )
+            elif result["status"] == "success":
+                successful.append(result)
+            else:
+                failed.append(result)
+
+        # Log summary
+        total = len(results)
+        logger.info(
+            f"📊 Dataset upload summary: {len(successful)}/{total} successful, {len(failed)}/{total} failed"
+        )
+
+        if failed:
+            logger.warning("Failed uploads:")
+            for fail in failed:
+                logger.warning(
+                    f"  ❌ {fail['do_email']}: {fail.get('error', 'Unknown error')}"
+                )
+
+        return {
+            "total": total,
+            "successful": successful,
+            "failed": failed,
+            "success_count": len(successful),
+            "failure_count": len(failed),
+            "success_rate": len(successful) / total if total > 0 else 0.0,
+        }
 
     # Private Methods
     def _parse_data_owners(self) -> List[DataOwnerInfo]:

@@ -32,7 +32,7 @@ run:
     uv run python src/safer_bench/main.py dataset.use_subset=false
 
 # Development: run with inspection (keep directories for debugging)
-run-inspect:
+run-dry-inspect:
     @echo -e "{{_yellow}}🔍 Running SAFER-Bench with directories kept for inspection...{{_nc}}"
     uv run python src/safer_bench/main.py dataset.use_subset=true runtime.clean=false
 
@@ -62,7 +62,7 @@ show-config:
     @echo -e "{{_cyan}}📋 Current configuration:{{_nc}}"
     uv run safer-bench --cfg job
 
-# Clean build artifacts
+# Clean running artifacts and caches
 clean:
     @echo -e "{{_yellow}}🧹 Cleaning up...{{_nc}}"
     rm -rf outputs/ multirun/ logs/ .pytest_cache/ .mypy_cache/ .ruff_cache/ safer_bench_network/

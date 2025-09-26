@@ -44,7 +44,7 @@ def display_config(cfg: DictConfig):
     mode = (
         "🚀 SUBSET MODE (Fast)" if cfg.dataset.use_subset else "🔬 FULL MODE (Complete)"
     )
-    logger.critical(f"SAFERBENCH CONFIGURATION - {mode}")
+    logger.info(f"\033[1;35mSAFERBENCH CONFIGURATION - {mode}\033[0m")
     logger.info("=" * 80)
 
     # Convert to YAML string for clean display
