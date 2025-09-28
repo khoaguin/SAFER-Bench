@@ -16,7 +16,7 @@ runtime:
 # QA Datasets
 qa:
   datasets: "pubmedqa|bioasq"
-  num_questions: 100  # Number of questions per dataset
+  num_questions: 10  # Number of questions per dataset
   query_types: ["factual", "reasoning", "comparative"]  # From README
 
 # Retrieval parameters

@@ -13,6 +13,7 @@ from omegaconf import DictConfig, OmegaConf
 from loguru import logger
 
 from safer_bench.federation_manager import FederationManager
+from safer_bench.fedrag_adapter import FedRAGProjectAdapter
 
 
 class BenchmarkRunner:
@@ -25,14 +26,16 @@ class BenchmarkRunner:
             cfg: Hydra configuration object
         """
         self.cfg = cfg
-        self.federation_manager = FederationManager(cfg)
-        # self.fedrag_adapter = FedRAGAdapter(cfg)
-        # self.metrics_collector = MetricsCollector(cfg)
 
         # Track benchmark metadata
         self.start_time = None
         self.end_time = None
         self.benchmark_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.federation_manager = FederationManager(cfg)
+        self.fedrag_adapter = FedRAGProjectAdapter(cfg)
+        self.fedrag_adapter.benchmark_id = self.benchmark_id
+
+        # self.metrics_collector = MetricsCollector(cfg)
 
     async def run(self) -> Dict[str, Any]:
         """Execute the complete benchmark workflow.
@@ -44,9 +47,9 @@ class BenchmarkRunner:
         logger.info(f"🚀 Starting SaferBench run: {self.benchmark_id}")
 
         try:
-            # Stage 1: Setup federation
+            # Stage 1: Setup federation (DOs and DS datasites)
             logger.info("=" * 60)
-            logger.info("\033[38;5;209mStage 1/7: Setting up federation\033[0m")
+            logger.info("\033[1;35mStage 1/7: Setting up federation\033[0m")
             logger.info("=" * 60)
             federation_info = await self.federation_manager.setup()
             logger.success(
@@ -55,61 +58,44 @@ class BenchmarkRunner:
 
             # Stage 2: Data owners create datasets
             logger.info("=" * 60)
-            logger.info("\033[38;5;209mStage 2/7: Data owners create datasets\033[0m")
+            logger.info("\033[1;35mStage 2/7: Data owners create datasets\033[0m")
             logger.info("=" * 60)
-
             datasets_upload_info = await self.federation_manager.upload_datasets()
+            self._log_dataset_upload_results(datasets_upload_info)
 
-            # Log results
-            if datasets_upload_info["success_count"] > 0:
-                logger.success(
-                    f"✅ Datasets uploaded: {datasets_upload_info['success_count']}/{datasets_upload_info['total']} successful"
-                )
-                for result in datasets_upload_info["successful"]:
-                    logger.info(
-                        f"  ✅ {result['do_email']}: {result['dataset_name']} ({result['data_fraction']*100}% data)"
-                    )
+            # Stage 3: Data Scientist prepares fedrag with injected parameters
+            logger.info("=" * 60)
+            logger.info(
+                "\033[1;35mStage 3/7: Preparing FedRAG with benchmark parameters\033[0m"
+            )
+            logger.info("=" * 60)
+            fedrag_project = await self.fedrag_adapter.prepare_project(federation_info)
+            logger.success(f"✅ FedRAG project prepared at: {fedrag_project}")
 
-            if datasets_upload_info["failure_count"] > 0:
-                logger.error(
-                    f"❌ {datasets_upload_info['failure_count']} dataset uploads failed"
-                )
-                for result in datasets_upload_info["failed"]:
-                    logger.error(
-                        f"  ❌ {result['do_email']}: {result.get('error', 'Unknown error')}"
-                    )
-
-            # # Stage 3: Prepare fedrag with injected parameters
+            # # Stage 4: Data Scientist submits jobs to all data owners
             # logger.info("=" * 60)
-            # logger.info("\033[38;5;209mStage 3/7: Preparing FedRAG with benchmark parameters\033[0m")
-            # logger.info("=" * 60)
-            # fedrag_project = await self.fedrag_adapter.prepare_project()
-            # logger.success(f"✅ FedRAG project prepared at: {fedrag_project}")
-
-            # # Stage 4: Submit jobs to data owners
-            # logger.info("=" * 60)
-            # logger.info("\033[38;5;209mStage 4/7: Submitting FedRAG jobs to data owners\033[0m")
+            # logger.info("\033[1;35mStage 4/7: Submitting FedRAG jobs to data owners\033[0m")
             # logger.info("=" * 60)
             # jobs = await self._submit_jobs(fedrag_project, federation_info)
             # logger.success(f"✅ Submitted {len(jobs)} jobs")
 
-            # # Stage 5: Process approvals based on approval rate
+            # # Stage 5: Data Owners review and approve jobs based on approval rate
             # logger.info("=" * 60)
-            # logger.info("\033[38;5;209mStage 5/7: Processing job approvals\033[0m")
+            # logger.info("\033[1;35mStage 5/7: Processing job approvals\033[0m")
             # logger.info("=" * 60)
             # approval_results = await self._process_approvals(jobs, federation_info)
             # logger.success(f"✅ Approved {approval_results['approved']}/{len(jobs)} jobs")
 
             # # Stage 6: Run federated RAG
             # logger.info("=" * 60)
-            # logger.info("\033[38;5;209mStage 6/7: Running Federated RAG\033[0m")
+            # logger.info("\033[1;35mStage 6/7: Running Federated RAG\033[0m")
             # logger.info("=" * 60)
             # fedrag_results = await self._run_fedrag(federation_info, approval_results)
             # logger.success(f"✅ FedRAG execution complete")
 
             # # Stage 7: Collect and save metrics
             # logger.info("=" * 60)
-            # logger.info("\033[38;5;209mStage 7/7: Collecting metrics and generating report\033[0m")
+            # logger.info("\033[1;35mStage 7/7: Collecting metrics and generating report\033[0m")
             # logger.info("=" * 60)
             # metrics = await self.metrics_collector.collect(
             #     fedrag_results,
@@ -317,3 +303,25 @@ class BenchmarkRunner:
         for i, do_info in enumerate(self.federation_manager.data_owners, 1):
             lines.append(f"- DO{i}: {do_info.dataset} ({do_info.data_fraction * 100}%)")
         return "\n".join(lines)
+
+    def _log_dataset_upload_results(self, upload_info: Dict) -> None:
+        """Log the results of dataset upload operations.
+
+        Args:
+            upload_info: Dictionary containing upload results with successful and failed uploads
+        """
+        if upload_info["success_count"] > 0:
+            logger.success(
+                f"✅ Datasets uploaded: {upload_info['success_count']}/{upload_info['total']} successful"
+            )
+            for result in upload_info["successful"]:
+                logger.info(
+                    f"  ✅ {result['do_email']}: {result['dataset_name']} ({result['data_fraction']*100}% data)"
+                )
+
+        if upload_info["failure_count"] > 0:
+            logger.error(f"❌ {upload_info['failure_count']} dataset uploads failed")
+            for result in upload_info["failed"]:
+                logger.error(
+                    f"  ❌ {result['do_email']}: {result.get('error', 'Unknown error')}"
+                )
