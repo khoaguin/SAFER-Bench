@@ -227,6 +227,75 @@ class FederationManager:
         # Process and categorize results
         return self._process_upload_results(results)
 
+    async def submit_jobs(
+        self, fedrag_project_path: Path, benchmark_id: str
+    ) -> List[Dict[str, Any]]:
+        """Submit FedRAG jobs to all data owners.
+
+        Args:
+            fedrag_project_path: Path to the prepared FedRAG project
+            benchmark_id: Unique identifier for this benchmark run
+
+        Returns:
+            List of job submission results with job objects and metadata
+        """
+        if not self.is_setup:
+            raise RuntimeError("Federation not setup. Call setup() first.")
+
+        logger.info(f"📨 Submitting FedRAG jobs to {len(self.data_owners)} data owners")
+
+        jobs_info = []
+        for do_info in self.data_owners:
+            try:
+                # Get DO client (as guest from DS perspective)
+                guest_client = self.ds_stack.init_session(host=do_info.email)
+
+                logger.info(
+                    f"Submitting job to {do_info.email} for dataset {do_info.dataset}"
+                )
+
+                # Submit job using syft_rds client
+                job = guest_client.job.submit(
+                    name=f"fedrag_benchmark_{benchmark_id}",
+                    user_code_path=fedrag_project_path,
+                    dataset_name=do_info.dataset,
+                    entrypoint="main.py",
+                )
+
+                jobs_info.append(
+                    {
+                        "job": job,
+                        "do_email": do_info.email,
+                        "dataset": do_info.dataset,
+                        "client": guest_client,
+                        "status": "submitted",
+                        "data_fraction": do_info.data_fraction,
+                    }
+                )
+
+                logger.success(f"✅ Job submitted to {do_info.email}")
+
+            except Exception as e:
+                logger.error(f"❌ Failed to submit job to {do_info.email}: {e}")
+                jobs_info.append(
+                    {
+                        "job": None,
+                        "do_email": do_info.email,
+                        "dataset": do_info.dataset,
+                        "client": None,
+                        "status": "failed",
+                        "error": str(e),
+                    }
+                )
+
+        # Log submission summary
+        submitted_count = sum(1 for j in jobs_info if j["status"] == "submitted")
+        logger.info(
+            f"📊 Job submission complete: {submitted_count}/{len(jobs_info)} successful"
+        )
+
+        return jobs_info
+
     async def _upload_single_dataset(self, do_info: DataOwnerInfo) -> Dict[str, Any]:
         """Upload dataset for a single data owner.
 

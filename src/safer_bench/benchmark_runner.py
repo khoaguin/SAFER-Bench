@@ -63,39 +63,43 @@ class BenchmarkRunner:
             datasets_upload_info = await self.federation_manager.upload_datasets()
             self._log_dataset_upload_results(datasets_upload_info)
 
-            # Stage 3: Data Scientist prepares fedrag with injected parameters
+            # Stage 3: Data Scientist prepares FedRAG project with injected parameters
             logger.info("=" * 60)
             logger.info(
-                "\033[1;35mStage 3/7: Preparing FedRAG with benchmark parameters\033[0m"
+                "\033[1;35mStage 3/7: Data Scientist prepares FedRAG project with benchmark parameters\033[0m"
             )
             logger.info("=" * 60)
             fedrag_project = await self.fedrag_adapter.prepare_project(federation_info)
             logger.success(f"✅ FedRAG project prepared at: {fedrag_project}")
 
-            # # Stage 4: Data Scientist submits jobs to all data owners
-            # logger.info("=" * 60)
-            # logger.info("\033[1;35mStage 4/7: Submitting FedRAG jobs to data owners\033[0m")
-            # logger.info("=" * 60)
-            # jobs = await self._submit_jobs(fedrag_project, federation_info)
-            # logger.success(f"✅ Submitted {len(jobs)} jobs")
+            # Stage 4: Data Scientist submits jobs to all data owners
+            logger.info("=" * 60)
+            logger.info(
+                "\033[1;35mStage 4/7: Data Scientist submits FedRAG jobs to data owners\033[0m"
+            )
+            logger.info("=" * 60)
+            jobs = await self.federation_manager.submit_jobs(
+                fedrag_project, self.benchmark_id
+            )
+            logger.success(f"✅ Submitted {len(jobs)} jobs")
 
             # # Stage 5: Data Owners review and approve jobs based on approval rate
             # logger.info("=" * 60)
-            # logger.info("\033[1;35mStage 5/7: Processing job approvals\033[0m")
+            # logger.info("\033[1;35mStage 5/7: Data Owners process job approvals\033[0m")
             # logger.info("=" * 60)
             # approval_results = await self._process_approvals(jobs, federation_info)
             # logger.success(f"✅ Approved {approval_results['approved']}/{len(jobs)} jobs")
 
             # # Stage 6: Run federated RAG
             # logger.info("=" * 60)
-            # logger.info("\033[1;35mStage 6/7: Running Federated RAG\033[0m")
+            # logger.info("\033[1;35mStage 6/7: Data Owners run Federated RAG job\033[0m")
             # logger.info("=" * 60)
             # fedrag_results = await self._run_fedrag(federation_info, approval_results)
             # logger.success(f"✅ FedRAG execution complete")
 
             # # Stage 7: Collect and save metrics
             # logger.info("=" * 60)
-            # logger.info("\033[1;35mStage 7/7: Collecting metrics and generating report\033[0m")
+            # logger.info("\033[1;35mStage 7/7: Data Scientist collects metrics and generating report\033[0m")
             # logger.info("=" * 60)
             # metrics = await self.metrics_collector.collect(
             #     fedrag_results,
@@ -138,50 +142,11 @@ class BenchmarkRunner:
                     f"   Network directory: {self.federation_manager.root_dir / self.federation_manager.network_key}"
                 )
 
-    async def _submit_jobs(self, fedrag_project: Path, federation_info: Dict) -> list:
-        """Submit FedRAG jobs to all data owners.
-
-        Args:
-            fedrag_project: Path to prepared FedRAG project
-            federation_info: Federation setup information
-
-        Returns:
-            List of submitted job objects
-        """
-        jobs = []
-
-        for i, do_client in enumerate(federation_info["clients"]):
-            do_info = self.federation_manager.data_owners[i]
-
-            logger.info(
-                f"Submitting job to {do_info.email} for dataset {do_info.dataset}"
-            )
-
-            # Submit job using syft_rds client
-            job = do_client.job.submit(
-                name=f"fedrag_benchmark_{self.benchmark_id}",
-                user_code_path=fedrag_project,
-                dataset_name=do_info.dataset,
-                entrypoint="main.py",
-            )
-
-            jobs.append(
-                {
-                    "job": job,
-                    "do_email": do_info.email,
-                    "dataset": do_info.dataset,
-                    "client": do_client,
-                }
-            )
-
-        return jobs
-
-    async def _process_approvals(self, jobs: list, federation_info: Dict) -> Dict:
+    async def _process_approvals(self, jobs: list) -> Dict:
         """Process job approvals based on configured approval rate.
 
         Args:
             jobs: List of submitted jobs
-            federation_info: Federation setup information
 
         Returns:
             Dictionary with approval results
@@ -212,11 +177,10 @@ class BenchmarkRunner:
             "approval_rate": approval_rate,
         }
 
-    async def _run_fedrag(self, federation_info: Dict, approval_results: Dict) -> Dict:
+    async def _run_fedrag(self, approval_results: Dict) -> Dict:
         """Execute the federated RAG workflow.
 
         Args:
-            federation_info: Federation setup information
             approval_results: Job approval results
 
         Returns:
