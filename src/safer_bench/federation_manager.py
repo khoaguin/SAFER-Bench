@@ -6,7 +6,9 @@ Handles SyftBox network initialization and data owner registration.
 import os
 import asyncio
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing_extensions import Dict, List, Any, Optional
+from enum import Enum
+import random
 
 from omegaconf import DictConfig
 from loguru import logger
@@ -15,6 +17,7 @@ from pydantic import BaseModel, Field, EmailStr, field_validator
 from syft_core import Client as SyftBoxClient
 from syft_rds.orchestra import setup_rds_server, remove_rds_stack_dir, SingleRDSStack
 from syft_rds.client.rds_client import RDSClient
+from syft_rds.models import Job
 
 from safer_bench.dataset_utils import get_dataset_path, validate_dataset_exists
 
@@ -41,6 +44,33 @@ class DataOwnerInfo(BaseModel):
                 f"Invalid dataset name: {v}. Must be one of {valid_datasets}."
             )
         return v
+
+
+class JobProcessingStatus(str, Enum):
+    """Enumeration of possible job approval statuses."""
+
+    approved = "approved"
+    rejected = "rejected"
+
+    submission_failed = "submission_failed"
+    submission_succeeded = "submission_succeeded"
+    processing_failed = "processing_failed"
+
+
+class JobInfo(BaseModel):
+    """Information about a submitted job in the federation."""
+
+    job: Optional[Job] = Field(None, description="Syft job object")
+    do_email: EmailStr = Field(..., description="Data owner email")
+    dataset: str = Field(..., description="Dataset name")
+    data_fraction: Optional[float] = Field(None, description="Data fraction used")
+    status: JobProcessingStatus = Field(..., description="Job status")
+    client: Optional[RDSClient] = Field(None, description="Syft client object")
+    error: Optional[str] = Field(None, description="Error message if failed")
+    benchmark_id: Optional[str] = Field(None, description="Benchmark run ID")
+
+    class Config:
+        arbitrary_types_allowed = True  # Allow Syft objects
 
 
 class FederationManager:
@@ -72,8 +102,9 @@ class FederationManager:
         self.is_setup = False
 
     # Public Methods
-    async def setup(self) -> Dict[str, Any]:
-        """Setup the federated environment with SyftBox.
+    async def setup_federation(self) -> Dict[str, Any]:
+        """Setup the federated environment with SyftBox, including:
+        DOs who owns the datasets and DS who wants to run FedRAG jobs on them.
 
         Returns:
             Dictionary containing federation setup information
@@ -202,7 +233,7 @@ class FederationManager:
 
         raise TimeoutError(f"Data owners not ready after {timeout} seconds")
 
-    async def upload_datasets(self) -> Dict[str, Any]:
+    async def dos_upload_datasets(self) -> Dict[str, Any]:
         """Upload datasets to all data owners concurrently.
 
         Returns:
@@ -227,9 +258,9 @@ class FederationManager:
         # Process and categorize results
         return self._process_upload_results(results)
 
-    async def submit_jobs(
+    async def ds_submits_jobs(
         self, fedrag_project_path: Path, benchmark_id: str
-    ) -> List[Dict[str, Any]]:
+    ) -> List[JobInfo]:
         """Submit FedRAG jobs to all data owners.
 
         Args:
@@ -244,7 +275,7 @@ class FederationManager:
 
         logger.info(f"📨 Submitting FedRAG jobs to {len(self.data_owners)} data owners")
 
-        jobs_info = []
+        jobs_info: List[JobInfo] = []
         for do_info in self.data_owners:
             try:
                 # Get DO client (as guest from DS perspective)
@@ -262,39 +293,113 @@ class FederationManager:
                     entrypoint="main.py",
                 )
 
-                jobs_info.append(
-                    {
-                        "job": job,
-                        "do_email": do_info.email,
-                        "dataset": do_info.dataset,
-                        "client": guest_client,
-                        "status": "submitted",
-                        "data_fraction": do_info.data_fraction,
-                    }
+                job_info = JobInfo(
+                    job=job,
+                    do_email=do_info.email,
+                    dataset=do_info.dataset,
+                    client=guest_client,
+                    status=JobProcessingStatus.submission_succeeded,  # Jobs start pending review
+                    data_fraction=do_info.data_fraction,
+                    benchmark_id=benchmark_id,
                 )
+                jobs_info.append(job_info)
 
                 logger.success(f"✅ Job submitted to {do_info.email}")
 
             except Exception as e:
                 logger.error(f"❌ Failed to submit job to {do_info.email}: {e}")
-                jobs_info.append(
-                    {
-                        "job": None,
-                        "do_email": do_info.email,
-                        "dataset": do_info.dataset,
-                        "client": None,
-                        "status": "failed",
-                        "error": str(e),
-                    }
+                job_info = JobInfo(
+                    job=None,
+                    do_email=do_info.email,
+                    dataset=do_info.dataset,
+                    client=None,
+                    status=JobProcessingStatus.submission_failed,  # Job submission failed
+                    error=str(e),
+                    benchmark_id=benchmark_id,
                 )
+                jobs_info.append(job_info)
 
         # Log submission summary
-        submitted_count = sum(1 for j in jobs_info if j["status"] == "submitted")
+        submitted_count = sum(
+            1 for j in jobs_info if j.status == JobProcessingStatus.submission_succeeded
+        )
         logger.info(
             f"📊 Job submission complete: {submitted_count}/{len(jobs_info)} successful"
         )
 
         return jobs_info
+
+    async def dos_process_jobs(
+        self, jobs_info: List[JobInfo], approval_rate: float
+    ) -> Dict[str, Any]:
+        """DOs approve / reject jobs based on configured approval rate.
+
+        Args:
+            jobs_info: List of submitted JobInfo objects
+            approval_rate: Percentage of jobs to approve (0.0 to 1.0)
+
+        Returns:
+            Dictionary with approval results and statistics
+        """
+        if not self.is_setup:
+            raise RuntimeError("Federation not setup. Call setup() first.")
+
+        logger.info(
+            f"📋 Processing job approvals with {approval_rate*100}% approval rate"
+        )
+
+        approved_jobs_info: List[JobInfo] = []
+        rejected_jobs_info: List[JobInfo] = []
+        processing_failed_jobs_info: List[JobInfo] = []
+
+        for job_info in jobs_info:
+            do_email = job_info.do_email
+            # Simulate approval based on rate
+            # In real implementation, this would check DO approval policies
+
+            # Determine if job should be rejected based on approval rate
+            should_reject = random.random() >= approval_rate
+
+            try:
+                if should_reject:
+                    # Reject job using DO client (as admin on their own datasite)
+                    logger.info(f"❌ Rejecting job for {do_email}")
+                    job_info.status = JobProcessingStatus.rejected
+                    rejected_jobs_info.append(job_info)
+                else:
+                    # Job is approved by default (no explicit approve call needed)
+                    logger.info(f"✅ Approving job for {do_email}")
+                    job_info.status = JobProcessingStatus.approved
+                    approved_jobs_info.append(job_info)
+
+            except Exception as e:
+                logger.error(f"Failed to process job for {do_email}: {e}")
+                job_info.status = JobProcessingStatus.processing_failed
+                job_info.error = str(e)
+                processing_failed_jobs_info.append(job_info)
+
+        # Log summary
+        total_jobs = len(jobs_info)
+        approved_count = len(approved_jobs_info)
+        rejected_count = len(rejected_jobs_info)
+        processing_failed_count = len(processing_failed_jobs_info)
+
+        logger.info(
+            f"📊 Job approval summary: {approved_count}/{total_jobs} approved, {rejected_count}/{total_jobs} rejected, {processing_failed_count}/{total_jobs} processing_failed"
+        )
+
+        return {
+            "total": total_jobs,
+            "approved": approved_count,
+            "rejected": rejected_count,
+            "approved_jobs": approved_jobs_info,
+            "rejected_jobs": rejected_jobs_info,
+            "processing_failed_jobs": processing_failed_jobs_info,
+            "approval_rate": approval_rate,
+            "actual_approval_rate": approved_count / total_jobs
+            if total_jobs > 0
+            else 0.0,
+        }
 
     async def _upload_single_dataset(self, do_info: DataOwnerInfo) -> Dict[str, Any]:
         """Upload dataset for a single data owner.

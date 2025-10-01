@@ -1,7 +1,7 @@
 """Dataset utilities for SaferBench."""
 
 from pathlib import Path
-from typing import Optional
+from typing_extensions import Optional
 
 
 def get_dataset_path(

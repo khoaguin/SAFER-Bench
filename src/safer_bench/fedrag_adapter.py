@@ -8,7 +8,7 @@ import yaml
 import tomli
 import tomli_w
 from pathlib import Path
-from typing import Dict, Optional
+from typing_extensions import Dict, Optional
 
 from omegaconf import DictConfig
 from loguru import logger

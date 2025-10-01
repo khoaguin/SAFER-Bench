@@ -7,12 +7,12 @@ import asyncio
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any
+from typing_extensions import Dict, Any, List
 
 from omegaconf import DictConfig, OmegaConf
 from loguru import logger
 
-from safer_bench.federation_manager import FederationManager
+from safer_bench.federation_manager import FederationManager, JobInfo
 from safer_bench.fedrag_adapter import FedRAGProjectAdapter
 
 
@@ -51,7 +51,7 @@ class BenchmarkRunner:
             logger.info("=" * 60)
             logger.info("\033[1;35mStage 1/7: Setting up federation\033[0m")
             logger.info("=" * 60)
-            federation_info = await self.federation_manager.setup()
+            federation_info = await self.federation_manager.setup_federation()
             logger.success(
                 f"✅ Federation ready with {len(federation_info['dos'])} data owners"
             )
@@ -60,7 +60,7 @@ class BenchmarkRunner:
             logger.info("=" * 60)
             logger.info("\033[1;35mStage 2/7: Data owners create datasets\033[0m")
             logger.info("=" * 60)
-            datasets_upload_info = await self.federation_manager.upload_datasets()
+            datasets_upload_info = await self.federation_manager.dos_upload_datasets()
             self._log_dataset_upload_results(datasets_upload_info)
 
             # Stage 3: Data Scientist prepares FedRAG project with injected parameters
@@ -78,17 +78,25 @@ class BenchmarkRunner:
                 "\033[1;35mStage 4/7: Data Scientist submits FedRAG jobs to data owners\033[0m"
             )
             logger.info("=" * 60)
-            jobs = await self.federation_manager.submit_jobs(
+            jobs_info = await self.federation_manager.ds_submits_jobs(
                 fedrag_project, self.benchmark_id
             )
-            logger.success(f"✅ Submitted {len(jobs)} jobs")
+            submitted_jobs_info: List[JobInfo] = [
+                job_info
+                for job_info in jobs_info
+                if job_info.status == "submission_succeeded"
+            ]
+            logger.success(f"✅ Submitted {len(submitted_jobs_info)} jobs successfully")
 
-            # # Stage 5: Data Owners review and approve jobs based on approval rate
-            # logger.info("=" * 60)
-            # logger.info("\033[1;35mStage 5/7: Data Owners process job approvals\033[0m")
-            # logger.info("=" * 60)
-            # approval_results = await self._process_approvals(jobs, federation_info)
-            # logger.success(f"✅ Approved {approval_results['approved']}/{len(jobs)} jobs")
+            # Stage 5: Data Owners review and approve jobs based on approval rate
+            logger.info("=" * 60)
+            logger.info("\033[1;35mStage 5/7: Data Owners process jobs\033[0m")
+            logger.info("=" * 60)
+            approved_jobs_info: Dict = await self.federation_manager.dos_process_jobs(
+                submitted_jobs_info, self.cfg.federation.approval.percentage
+            )
+            # logger.success(f"✅ Approved {len(approved_jobs_info)}/{len(submitted_jobs_info)} jobs")
+            logger.info(f"approved_jobs_info: {approved_jobs_info}")
 
             # # Stage 6: Run federated RAG
             # logger.info("=" * 60)
@@ -141,41 +149,6 @@ class BenchmarkRunner:
                 logger.info(
                     f"   Network directory: {self.federation_manager.root_dir / self.federation_manager.network_key}"
                 )
-
-    async def _process_approvals(self, jobs: list) -> Dict:
-        """Process job approvals based on configured approval rate.
-
-        Args:
-            jobs: List of submitted jobs
-
-        Returns:
-            Dictionary with approval results
-        """
-        approval_rate = self.cfg.federation.approval.percentage
-        approved_jobs = []
-        rejected_jobs = []
-
-        for job_info in jobs:
-            # Simulate approval based on rate
-            # In real implementation, this would check DO approval policies
-            import random
-
-            if random.random() < approval_rate:
-                # Approve job
-                logger.info(f"✅ Approving job for {job_info['do_email']}")
-                # In real implementation: job_info["client"].job.approve(job_info["job"])
-                approved_jobs.append(job_info)
-            else:
-                logger.info(f"❌ Rejecting job for {job_info['do_email']}")
-                rejected_jobs.append(job_info)
-
-        return {
-            "approved": len(approved_jobs),
-            "rejected": len(rejected_jobs),
-            "approved_jobs": approved_jobs,
-            "rejected_jobs": rejected_jobs,
-            "approval_rate": approval_rate,
-        }
 
     async def _run_fedrag(self, approval_results: Dict) -> Dict:
         """Execute the federated RAG workflow.
