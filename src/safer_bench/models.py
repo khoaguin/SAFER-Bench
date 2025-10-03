@@ -1,4 +1,4 @@
-from typing_extensions import Optional, List
+from typing_extensions import Optional, List, Any
 from enum import Enum
 
 from pydantic import BaseModel, Field, EmailStr, field_validator
@@ -65,3 +65,42 @@ class JobProcessingResult(BaseModel):
     rejected_jobs: List[JobInfo]
     processing_failed_jobs: List[JobInfo]
     approval_rate: float = Field(..., ge=0.0, le=1.0)
+
+
+class DatasetUploadStatus(str, Enum):
+    """Enumeration of dataset upload statuses."""
+
+    success = "success"
+    failed = "failed"
+
+
+class DatasetUploadInfo(BaseModel):
+    """Information about a single dataset upload."""
+
+    do_email: EmailStr = Field(..., description="Data owner email")
+    dataset_name: str = Field(..., description="Dataset name")
+    status: DatasetUploadStatus = Field(..., description="Upload status")
+    syft_dataset_name: Optional[str] = Field(None, description="Syft dataset name")
+    dataset_object: Optional[Any] = Field(None, description="Syft dataset object")
+    corpus_path: Optional[str] = Field(None, description="Path to corpus")
+    data_fraction: Optional[float] = Field(None, description="Data fraction")
+    error: Optional[str] = Field(None, description="Error message if failed")
+    error_type: Optional[str] = Field(None, description="Error type if failed")
+
+    class Config:
+        arbitrary_types_allowed = True  # Allow Syft objects
+
+
+class DatasetUploadResult(BaseModel):
+    """Results from uploading datasets to data owners."""
+
+    total: int = Field(..., ge=0, description="Total number of uploads")
+    success_count: int = Field(..., ge=0, description="Number of successful uploads")
+    failure_count: int = Field(..., ge=0, description="Number of failed uploads")
+    successful: List[DatasetUploadInfo] = Field(
+        default_factory=list, description="Successful uploads"
+    )
+    failed: List[DatasetUploadInfo] = Field(
+        default_factory=list, description="Failed uploads"
+    )
+    success_rate: float = Field(..., ge=0.0, le=1.0, description="Success rate")

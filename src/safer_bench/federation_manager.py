@@ -22,6 +22,9 @@ from safer_bench.models import (
     JobInfo,
     JobProcessingStatus,
     JobProcessingResult,
+    DatasetUploadStatus,
+    DatasetUploadInfo,
+    DatasetUploadResult,
 )
 
 
@@ -188,11 +191,11 @@ class FederationManager:
 
         raise TimeoutError(f"Data owners not ready after {timeout} seconds")
 
-    async def dos_upload_datasets(self) -> Dict[str, Any]:
+    async def dos_upload_datasets(self) -> DatasetUploadResult:
         """Upload datasets to all data owners concurrently.
 
         Returns:
-            Dictionary containing upload results with successful and failed uploads
+            DatasetUploadResult containing upload results with successful and failed uploads
         """
         if not self.is_setup:
             raise RuntimeError("Federation not setup. Call setup() first.")
@@ -353,14 +356,14 @@ class FederationManager:
             approval_rate=approval_rate,
         )
 
-    async def _upload_single_dataset(self, do_info: DataOwnerInfo) -> Dict[str, Any]:
+    async def _upload_single_dataset(self, do_info: DataOwnerInfo) -> DatasetUploadInfo:
         """Upload dataset for a single data owner.
 
         Args:
             do_info: DataOwnerInfo object for the data owner
 
         Returns:
-            Dictionary with upload result information
+            DatasetUploadInfo with upload result information
         """
         try:
             logger.debug(f"📤 Starting dataset upload for {do_info.email}")
@@ -404,34 +407,34 @@ class FederationManager:
                 f"✅ Dataset upload successful for {do_info.email}: {dataset_name}"
             )
 
-            return {
-                "do_email": do_info.email,
-                "dataset_name": do_info.dataset,
-                "syft_dataset_name": dataset_name,
-                "dataset_object": dataset,
-                "corpus_path": str(corpus_path),
-                "status": "success",
-                "data_fraction": do_info.data_fraction,
-            }
+            return DatasetUploadInfo(
+                do_email=do_info.email,
+                dataset_name=do_info.dataset,
+                syft_dataset_name=dataset_name,
+                dataset_object=dataset,
+                corpus_path=str(corpus_path),
+                status=DatasetUploadStatus.success,
+                data_fraction=do_info.data_fraction,
+            )
 
         except Exception as e:
             logger.error(f"❌ Dataset upload failed for {do_info.email}: {e}")
-            return {
-                "do_email": do_info.email,
-                "dataset_name": do_info.dataset,
-                "status": "failed",
-                "error": str(e),
-                "error_type": type(e).__name__,
-            }
+            return DatasetUploadInfo(
+                do_email=do_info.email,
+                dataset_name=do_info.dataset,
+                status=DatasetUploadStatus.failed,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
-    def _process_upload_results(self, results: List[Any]) -> Dict[str, Any]:
+    def _process_upload_results(self, results: List[Any]) -> DatasetUploadResult:
         """Process and categorize upload results.
 
         Args:
             results: List of upload results or exceptions
 
         Returns:
-            Dictionary with categorized results and summary statistics
+            DatasetUploadResult with categorized results and summary statistics
         """
         successful = []
         failed = []
@@ -440,15 +443,15 @@ class FederationManager:
             # Handle exceptions that occurred during asyncio.gather
             if isinstance(result, Exception):
                 failed.append(
-                    {
-                        "do_email": "unknown",
-                        "dataset_name": "unknown",
-                        "status": "failed",
-                        "error": str(result),
-                        "error_type": type(result).__name__,
-                    }
+                    DatasetUploadInfo(
+                        do_email="unknown",
+                        dataset_name="unknown",
+                        status=DatasetUploadStatus.failed,
+                        error=str(result),
+                        error_type=type(result).__name__,
+                    )
                 )
-            elif result["status"] == "success":
+            elif result.status == DatasetUploadStatus.success:
                 successful.append(result)
             else:
                 failed.append(result)
@@ -462,18 +465,16 @@ class FederationManager:
         if failed:
             logger.warning("Failed uploads:")
             for fail in failed:
-                logger.warning(
-                    f"  ❌ {fail['do_email']}: {fail.get('error', 'Unknown error')}"
-                )
+                logger.warning(f"  ❌ {fail.do_email}: {fail.error or 'Unknown error'}")
 
-        return {
-            "total": total,
-            "successful": successful,
-            "failed": failed,
-            "success_count": len(successful),
-            "failure_count": len(failed),
-            "success_rate": len(successful) / total if total > 0 else 0.0,
-        }
+        return DatasetUploadResult(
+            total=total,
+            successful=successful,
+            failed=failed,
+            success_count=len(successful),
+            failure_count=len(failed),
+            success_rate=len(successful) / total if total > 0 else 0.0,
+        )
 
     # Private Methods
     def _parse_data_owners(self) -> List[DataOwnerInfo]:

@@ -243,24 +243,24 @@ class BenchmarkRunner:
             lines.append(f"- DO{i}: {do_info.dataset} ({do_info.data_fraction * 100}%)")
         return "\n".join(lines)
 
-    def _log_dataset_upload_results(self, upload_info: Dict) -> None:
+    def _log_dataset_upload_results(self, upload_result) -> None:
         """Log the results of dataset upload operations.
 
         Args:
-            upload_info: Dictionary containing upload results with successful and failed uploads
+            upload_result: DatasetUploadResult containing upload results
         """
-        if upload_info["success_count"] > 0:
+        if upload_result.success_count > 0:
             logger.success(
-                f"✅ Datasets uploaded: {upload_info['success_count']}/{upload_info['total']} successful"
+                f"✅ Datasets uploaded: {upload_result.success_count}/{upload_result.total} successful"
             )
-            for result in upload_info["successful"]:
+            for result in upload_result.successful:
                 logger.info(
-                    f"  ✅ {result['do_email']}: {result['dataset_name']} ({result['data_fraction']*100}% data)"
+                    f"  ✅ {result.do_email}: {result.dataset_name} ({result.data_fraction*100}% data)"
                 )
 
-        if upload_info["failure_count"] > 0:
-            logger.error(f"❌ {upload_info['failure_count']} dataset uploads failed")
-            for result in upload_info["failed"]:
+        if upload_result.failure_count > 0:
+            logger.error(f"❌ {upload_result.failure_count} dataset uploads failed")
+            for result in upload_result.failed:
                 logger.error(
-                    f"  ❌ {result['do_email']}: {result.get('error', 'Unknown error')}"
+                    f"  ❌ {result.do_email}: {result.error or 'Unknown error'}"
                 )
