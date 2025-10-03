@@ -92,11 +92,13 @@ class BenchmarkRunner:
             logger.info("=" * 60)
             logger.info("\033[1;35mStage 5/7: Data Owners process jobs\033[0m")
             logger.info("=" * 60)
-            approved_jobs_info: Dict = await self.federation_manager.dos_process_jobs(
+            jobs_processing_results = await self.federation_manager.dos_process_jobs(
                 submitted_jobs_info, self.cfg.federation.approval.percentage
             )
-            # logger.success(f"✅ Approved {len(approved_jobs_info)}/{len(submitted_jobs_info)} jobs")
-            logger.info(f"approved_jobs_info: {approved_jobs_info}")
+            logger.info(
+                f"Job processing complete: {jobs_processing_results.num_approved}/{jobs_processing_results.total} approved, "
+                f"{jobs_processing_results.num_rejected}/{jobs_processing_results.total} rejected"
+            )
 
             # # Stage 6: Run federated RAG
             # logger.info("=" * 60)

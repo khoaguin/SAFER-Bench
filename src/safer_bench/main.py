@@ -5,6 +5,7 @@ import asyncio
 from pathlib import Path
 
 import hydra
+from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig
 from loguru import logger
 
@@ -43,9 +44,6 @@ async def run_benchmark(cfg: DictConfig):
 @hydra.main(version_base=None, config_path=CONFIG_PATH, config_name="config")
 def main(cfg: DictConfig) -> None:
     """Main entry point with Hydra."""
-    # Add file logging to capture all logs in the output directory
-    from hydra.core.hydra_config import HydraConfig
-
     hydra_cfg = HydraConfig.get()
     output_dir = Path(hydra_cfg.runtime.output_dir)
 
@@ -55,6 +53,10 @@ def main(cfg: DictConfig) -> None:
         format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} - {message}",
         level="DEBUG",
     )
+
+    # Disable debug logs from syft libraries
+    logger.disable("syft_rds.client.rds_clients.runtime")
+    logger.disable("syft_event.handlers")
 
     # Run the async benchmark
     asyncio.run(run_benchmark(cfg))
