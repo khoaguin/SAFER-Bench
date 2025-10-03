@@ -22,24 +22,24 @@ _nc := '\033[0m'
 # ---------------------------------------------------------------------------------------------------------------------
 
 # Development: quick run with data subsets (fast iteration)
-run-dry:
-    @echo -e "{{_cyan}}🚀 Running SAFER-Bench in SUBSET mode (fast)...{{_nc}}"
-    uv run python src/safer_bench/main.py dataset.use_subset=true
+run-dry federation="local_2do":
+    @echo -e "{{_cyan}}🚀 Running SAFER-Bench in SUBSET mode (fast) with {{federation}}...{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=true federation={{federation}}
 
 # Production: full benchmark with complete datasets
-run:
-    @echo -e "{{_green}}🔬 Running SAFER-Bench in FULL mode (complete)...{{_nc}}"
-    uv run python src/safer_bench/main.py dataset.use_subset=false
+run federation="local_2do":
+    @echo -e "{{_green}}🔬 Running SAFER-Bench in FULL mode (complete) with {{federation}}...{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=false federation={{federation}}
 
 # Development: run with inspection (keep directories for debugging)
-run-dry-inspect:
-    @echo -e "{{_yellow}}🔍 Running SAFER-Bench with directories kept for inspection...{{_nc}}"
-    uv run python src/safer_bench/main.py dataset.use_subset=true runtime.clean=false
+run-dry-inspect federation="local_2do":
+    @echo -e "{{_yellow}}🔍 Running SAFER-Bench with directories kept for inspection ({{federation}})...{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=true runtime.clean=false federation={{federation}}
 
 # Production: run with inspection (keep directories for debugging)
-run-inspect-full:
-    @echo -e "{{_yellow}}🔍 Running SAFER-Bench FULL mode with directories kept for inspection...{{_nc}}"
-    uv run python src/safer_bench/main.py dataset.use_subset=false runtime.clean=false
+run-inspect-full federation="local_2do":
+    @echo -e "{{_yellow}}🔍 Running SAFER-Bench FULL mode with directories kept for inspection ({{federation}})...{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=false runtime.clean=false federation={{federation}}
 
 # Development sweep: quick parameter exploration with subsets
 sweep-dry:

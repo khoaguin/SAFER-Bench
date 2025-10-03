@@ -5,9 +5,9 @@ Handles SyftBox network initialization and data owner registration.
 
 import os
 import asyncio
+import random
 from pathlib import Path
 from typing_extensions import Dict, List, Any, Optional
-import random
 
 from omegaconf import DictConfig
 from loguru import logger
@@ -310,25 +310,37 @@ class FederationManager:
         rejected_jobs_info: List[JobInfo] = []
         processing_failed_jobs_info: List[JobInfo] = []
 
-        for job_info in jobs_info:
-            do_email = job_info.do_email
-            # Simulate approval based on rate
-            # In real implementation, this would check DO approval policies
+        # Deterministic but fair approval using seeded shuffle
+        # Use benchmark_id as seed for reproducibility
+        if jobs_info and jobs_info[0].benchmark_id:
+            # Convert benchmark_id to integer seed for reproducibility
+            seed = hash(jobs_info[0].benchmark_id) % (2**32)
+            random.seed(seed)
+            logger.debug(
+                f"Using seed {seed} (from benchmark_id) for job approval shuffle"
+            )
 
-            # Determine if job should be rejected based on approval rate
-            should_reject = random.random() >= approval_rate
+        # Shuffle jobs to ensure fair distribution across DOs
+        shuffled_jobs = jobs_info.copy()
+        random.shuffle(shuffled_jobs)
+
+        # Approve first N jobs from shuffled list
+        num_to_approve = int(len(shuffled_jobs) * approval_rate)
+
+        for idx, job_info in enumerate(shuffled_jobs):
+            do_email = job_info.do_email
 
             try:
-                if should_reject:
-                    # Reject job using DO client (as admin on their own datasite)
-                    logger.info(f"❌ Rejecting job for {do_email}")
-                    job_info.status = JobProcessingStatus.rejected
-                    rejected_jobs_info.append(job_info)
-                else:
-                    # Job is approved by default (no explicit approve call needed)
+                if idx < num_to_approve:
+                    # Approve first N jobs from shuffled list
                     logger.info(f"✅ Approving job for {do_email}")
                     job_info.status = JobProcessingStatus.approved
                     approved_jobs_info.append(job_info)
+                else:
+                    # Reject remaining jobs
+                    logger.info(f"❌ Rejecting job for {do_email}")
+                    job_info.status = JobProcessingStatus.rejected
+                    rejected_jobs_info.append(job_info)
 
             except Exception as e:
                 logger.error(f"Failed to process job for {do_email}: {e}")
