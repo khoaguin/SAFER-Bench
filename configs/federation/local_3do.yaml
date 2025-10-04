@@ -18,12 +18,12 @@ do2:
 
 do3:
   email: "do3@saferbench.com"
-  dataset: "mimic-iv-note"
+  dataset: "textbooks"
   data_fraction: 0.05  # 5% of mimic-iv-note dataset
 
 # Federation approval behavior
 approval:
-  percentage: 1.0  # 100% approval rate (can sweep: 0.25, 0.5, 0.75, 1.0)
+  percentage: 0.25  # 100% approval rate (can sweep: 0.25, 0.5, 0.75, 1.0)
   mechanism: "static"  # static, dynamic, consensus
 
 # Local setup configuration

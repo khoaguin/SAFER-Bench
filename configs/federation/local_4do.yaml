@@ -28,7 +28,7 @@ do4:
 
 # Federation approval behavior
 approval:
-  percentage: 0.5  # 100% approval rate (can sweep: 0.25, 0.5, 0.75, 1.0)
+  percentage: 0.25  # 100% approval rate (can sweep: 0.25, 0.5, 0.75, 1.0)
   mechanism: "static"  # static, dynamic, consensus
 
 # Local setup configuration

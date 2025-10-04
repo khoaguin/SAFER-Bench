@@ -3,13 +3,12 @@ BenchmarkRunner: Main orchestrator for SaferBench framework.
 Coordinates the entire federated RAG benchmarking workflow.
 """
 
-import asyncio
 import json
 from pathlib import Path
 from datetime import datetime
 from typing_extensions import Dict, Any, List
 
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 from loguru import logger
 
 from safer_bench.federation_manager import FederationManager, JobInfo
@@ -32,6 +31,7 @@ class BenchmarkRunner:
         self.end_time = None
         self.benchmark_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.federation_manager = FederationManager(cfg)
+        self.federation_manager.benchmark_id = self.benchmark_id  # Set benchmark_id
         self.fedrag_adapter = FedRAGProjectAdapter(cfg)
         self.fedrag_adapter.benchmark_id = self.benchmark_id
 
@@ -53,7 +53,7 @@ class BenchmarkRunner:
             logger.info("=" * 60)
             federation_info = await self.federation_manager.setup_federation()
             logger.success(
-                f"✅ Federation ready with {len(federation_info['dos'])} data owners"
+                f"✅ Federation ready with {federation_info.num_data_owners} data owners"
             )
 
             # Stage 2: Data owners create datasets
@@ -100,12 +100,16 @@ class BenchmarkRunner:
                 f"{jobs_processing_results.num_rejected}/{jobs_processing_results.total} rejected"
             )
 
-            # # Stage 6: Run federated RAG
-            # logger.info("=" * 60)
-            # logger.info("\033[1;35mStage 6/7: Data Owners run Federated RAG job\033[0m")
-            # logger.info("=" * 60)
-            # fedrag_results = await self._run_fedrag(federation_info, approval_results)
-            # logger.success(f"✅ FedRAG execution complete")
+            # Stage 6: Run federated RAG
+            logger.info("=" * 60)
+            logger.info("\033[1;35mStage 6/7: Data Owners run Federated RAG job\033[0m")
+            logger.info("=" * 60)
+            fedrag_results = await self.federation_manager.dos_run_fedrag_jobs(
+                federation_info, jobs_processing_results
+            )
+            logger.success(
+                f"✅ FedRAG execution complete with results: {fedrag_results}"
+            )
 
             # # Stage 7: Collect and save metrics
             # logger.info("=" * 60)
@@ -116,26 +120,26 @@ class BenchmarkRunner:
             #     federation_info,
             #     approval_results
             # )
-            metrics = {}
+            # metrics = {}
 
-            self.end_time = datetime.now()
-            metrics["benchmark_metadata"] = {
-                "benchmark_id": self.benchmark_id,
-                "start_time": self.start_time.isoformat(),
-                "end_time": self.end_time.isoformat(),
-                "duration_seconds": (self.end_time - self.start_time).total_seconds(),
-                "configuration": OmegaConf.to_container(self.cfg),
-            }
+            # self.end_time = datetime.now()
+            # metrics["benchmark_metadata"] = {
+            #     "benchmark_id": self.benchmark_id,
+            #     "start_time": self.start_time.isoformat(),
+            #     "end_time": self.end_time.isoformat(),
+            #     "duration_seconds": (self.end_time - self.start_time).total_seconds(),
+            #     "configuration": OmegaConf.to_container(self.cfg),
+            # }
 
-            # Save results
-            await self._save_results(metrics)
+            # # Save results
+            # await self._save_results(metrics)
 
             logger.success("=" * 60)
             logger.success(f"🎉 Benchmark complete! ID: {self.benchmark_id}")
             logger.success(f"📊 Results saved to: {self.cfg.evaluation.output_dir}")
             logger.success("=" * 60)
 
-            return metrics
+            return {}
 
         except Exception as e:
             logger.error(f"❌ Benchmark failed: {e}")
@@ -151,40 +155,6 @@ class BenchmarkRunner:
                 logger.info(
                     f"   Network directory: {self.federation_manager.root_dir / self.federation_manager.network_key}"
                 )
-
-    async def _run_fedrag(self, approval_results: Dict) -> Dict:
-        """Execute the federated RAG workflow.
-
-        Args:
-            approval_results: Job approval results
-
-        Returns:
-            Dictionary with FedRAG execution results
-        """
-        # This would run the actual FedRAG workflow
-        # For now, returning mock results
-        logger.info("Running FedRAG with approved data owners...")
-
-        # In real implementation, this would:
-        # 1. Start the DS aggregator server
-        # 2. Wait for DO clients to connect and run
-        # 3. Collect retrieval results
-        # 4. Run LLM queries
-        # 5. Return results
-
-        await asyncio.sleep(2)  # Simulate execution time
-
-        return {
-            "num_queries": self.cfg.qa.num_questions,
-            "participating_dos": len(approval_results["approved_jobs"]),
-            "retrieval_k": self.cfg.retrieval.k_nn,
-            "llm_model": self.cfg.llm.name,
-            "merger_algorithm": self.cfg.merger.name,
-            # Mock results - will be replaced with actual FedRAG results
-            "accuracy": 0.75,
-            "mean_query_time": 1.23,
-            "total_documents_retrieved": 80,
-        }
 
     async def _save_results(self, metrics: Dict):
         """Save benchmark results to disk.

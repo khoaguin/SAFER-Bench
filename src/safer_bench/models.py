@@ -28,6 +28,20 @@ class DataOwnerInfo(BaseModel):
         return v
 
 
+class FederationInfo(BaseModel):
+    """Federation configuration and metadata (no runtime objects)."""
+
+    benchmark_id: str = Field(..., description="Unique benchmark run identifier")
+    data_owners: List[DataOwnerInfo] = Field(
+        ..., description="Data owner configurations"
+    )
+    aggregator: EmailStr = Field(
+        ..., description="Aggregator (data scientist) email address"
+    )
+    network_key: str = Field(..., description="Network key identifier")
+    num_data_owners: int = Field(..., ge=1, description="Number of data owners")
+
+
 class JobProcessingStatus(str, Enum):
     """Enumeration of possible job approval statuses."""
 

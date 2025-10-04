@@ -25,6 +25,7 @@ from safer_bench.models import (
     DatasetUploadStatus,
     DatasetUploadInfo,
     DatasetUploadResult,
+    FederationInfo,
 )
 
 
@@ -49,6 +50,7 @@ class FederationManager:
         self.aggregator_email: str = cfg.federation.aggregator
         self.data_owners: List[DataOwnerInfo] = self._parse_data_owners()
         self.use_subset: bool = cfg.dataset.use_subset
+        self.benchmark_id: Optional[str] = None  # Set by BenchmarkRunner
 
         # Runtime state tracked separately
         self.ds_stack: Optional[SingleRDSStack] = None
@@ -60,12 +62,12 @@ class FederationManager:
         self.is_setup = False
 
     # Public Methods
-    async def setup_federation(self) -> Dict[str, Any]:
+    async def setup_federation(self) -> FederationInfo:
         """Setup the federated environment with SyftBox, including:
         DOs who owns the datasets and DS who wants to run FedRAG jobs on them.
 
         Returns:
-            Dictionary containing federation setup information
+            FederationInfo containing federation setup information
         """
         logger.info(
             f"🔧 Setting up federation with {len(self.data_owners)} data owners"
@@ -88,18 +90,18 @@ class FederationManager:
 
             self.is_setup = True
 
-            federation_info = {
-                "ds": self.ds_stack,
-                "ds_client": self.ds_client,
-                "dos": list(self.do_stacks.values()),
-                "clients": list(self.do_clients.values()),
-                "data_owners": self.data_owners,
-                "aggregator": self.aggregator_email,
-                "network_key": self.network_key,
-            }
+            federation_info = FederationInfo(
+                benchmark_id=self.benchmark_id or "unknown",
+                data_owners=self.data_owners,
+                aggregator=self.aggregator_email,
+                network_key=self.network_key,
+                num_data_owners=len(self.data_owners),
+            )
 
             logger.success("✅ Federation setup complete")
-            self._log_federation_summary(federation_info)
+            logger.debug(
+                f"Federation info: {federation_info.model_dump_json(indent=2)}"
+            )
 
             return federation_info
 
@@ -368,6 +370,29 @@ class FederationManager:
             approval_rate=approval_rate,
         )
 
+    async def dos_run_fedrag_jobs(
+        self,
+        federation_info: FederationInfo,
+        jobs_processing_results: JobProcessingResult,
+    ) -> List[JobInfo]:
+        """Run FedRAG jobs on all approved data owners.
+
+        Args:
+            federation_info: Federation setup information
+            jobs_processing_results: JobProcessingResult with approved jobs
+
+        Returns:
+            List of JobInfo with updated job statuses and results
+        """
+        if not self.is_setup:
+            raise RuntimeError("Federation not setup. Call setup() first.")
+
+        logger.info(
+            f"🚀 Running FedRAG jobs on {len(jobs_processing_results.approved_jobs)} approved data owners"
+        )
+
+        pass
+
     async def _upload_single_dataset(self, do_info: DataOwnerInfo) -> DatasetUploadInfo:
         """Upload dataset for a single data owner.
 
@@ -586,23 +611,3 @@ class FederationManager:
                 do_client.is_admin
             ), f"{do_info.email} should be admin on their datasite"
             logger.debug(f"✅ {do_info.email} is admin on their datasite")
-
-    def _log_federation_summary(self, federation_info: Dict):
-        """Log a summary of the federation setup.
-
-        Args:
-            federation_info: Federation setup information
-        """
-        logger.info("=" * 60)
-        logger.info("Federation Summary:")
-        logger.info(f"  Aggregator: {self.aggregator_email}")
-        logger.info(f"  Network Key: {self.network_key}")
-        logger.info(f"  Network Directory: {self.root_dir / self.network_key}")
-        logger.info(f"  Data Owners ({len(self.data_owners)}):")
-
-        for i, do_info in enumerate(self.data_owners, 1):
-            logger.info(f"    DO{i}: {do_info.email}")
-            logger.info(f"         Dataset: {do_info.dataset}")
-            logger.info(f"         Data Fraction: {do_info.data_fraction * 100}%")
-
-        logger.info("=" * 60)

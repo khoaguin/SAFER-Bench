@@ -14,6 +14,8 @@ from omegaconf import DictConfig
 from loguru import logger
 from syft_flwr.bootstrap import bootstrap as syft_flwr_bootstrap
 
+from safer_bench.models import FederationInfo
+
 
 class FedRAGProjectAdapter:
     """Adapter for preparing FedRAG projects with benchmark-specific parameters.
@@ -42,7 +44,9 @@ class FedRAGProjectAdapter:
         # Benchmark ID will be set by BenchmarkRunner
         self.benchmark_id = None
 
-    async def prepare_project(self, federation_info: Optional[Dict] = None) -> Path:
+    async def prepare_project(
+        self, federation_info: Optional[FederationInfo] = None
+    ) -> Path:
         """Prepare FedRAG project with injected benchmark parameters.
 
         Args:
@@ -160,7 +164,7 @@ class FedRAGProjectAdapter:
                 .setdefault("flwr", {})
                 .setdefault("federations", {})
             )
-            num_dos = len(federation_info["data_owners"])
+            num_dos = len(federation_info.data_owners)
             federations.setdefault("local-simulation", {}).setdefault("options", {})[
                 "num-supernodes"
             ] = num_dos
@@ -173,7 +177,9 @@ class FedRAGProjectAdapter:
         if federation_info:
             self._bootstrap_syft_flwr(fedrag_path, federation_info)
 
-    def _update_flwr_app_config(self, pyproject: Dict, federation_info: Optional[Dict]):
+    def _update_flwr_app_config(
+        self, pyproject: Dict, federation_info: Optional[FederationInfo]
+    ):
         """Update [tool.flwr.app.config] section with benchmark parameters.
 
         Args:
@@ -199,10 +205,8 @@ class FedRAGProjectAdapter:
         app_config["chunk-overlap"] = self.cfg.retrieval.get("chunk_overlap", 50)
 
         # Corpus configuration (from federation)
-        if federation_info and "data_owners" in federation_info:
-            corpus_names = "|".join(
-                [do.dataset for do in federation_info["data_owners"]]
-            )
+        if federation_info:
+            corpus_names = "|".join([do.dataset for do in federation_info.data_owners])
             app_config["clients-corpus-names"] = corpus_names
 
         # Merger configuration
@@ -229,7 +233,7 @@ class FedRAGProjectAdapter:
 
         app_config["server-llm-use-gpu"] = str(llm_config.get("use_gpu", False)).lower()
 
-    def _bootstrap_syft_flwr(self, fedrag_path: Path, federation_info: Dict):
+    def _bootstrap_syft_flwr(self, fedrag_path: Path, federation_info: FederationInfo):
         """Use syft-flwr's bootstrap to configure federation information.
         This will create the [tool.syft_flwr] section in pyproject.toml.
 
@@ -239,8 +243,8 @@ class FedRAGProjectAdapter:
         """
         try:
             # Extract aggregator and datasites from federation_info
-            aggregator = federation_info.get("aggregator")
-            datasites = [do.email for do in federation_info.get("data_owners", [])]
+            aggregator = federation_info.aggregator
+            datasites = [do.email for do in federation_info.data_owners]
 
             if not aggregator or not datasites:
                 logger.warning(
