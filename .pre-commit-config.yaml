@@ -4,26 +4,35 @@ repos:
   hooks:
   - id: check-ast
     always_run: true
+    exclude: "^notebooks/"
   - id: trailing-whitespace
     always_run: true
+    exclude: "^notebooks/"
   - id: check-docstring-first
     always_run: true
+    exclude: "^notebooks/"
   - id: check-json
     always_run: true
-    exclude: ".vscode"
+    exclude: "^(notebooks/|\\.vscode)"
   - id: check-yaml
     always_run: true
+    exclude: "^notebooks/"
   - id: check-merge-conflict
     always_run: true
     args: [ "--assume-in-merge" ]
+    exclude: "^notebooks/"
   - id: check-executables-have-shebangs
     always_run: true
+    exclude: "^notebooks/"
   - id: debug-statements
     always_run: true
+    exclude: "^notebooks/"
   - id: requirements-txt-fixer
     always_run: true
+    exclude: "^notebooks/"
   - id: mixed-line-ending
     args: [ "--fix=lf" ]
+    exclude: "^notebooks/"
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
@@ -32,10 +41,13 @@ repos:
   - id: ruff
     args: [ --fix, --exit-non-zero-on-fix, --show-fixes ]
     types_or: [ python, pyi, jupyter ]
+    exclude: "^notebooks/"
   - id: ruff-format
     types_or: [ python, pyi, jupyter ]
+    exclude: "^notebooks/"
 
 - repo: https://github.com/kynan/nbstripout
   rev: 0.7.1
   hooks:
   - id: nbstripout
+    exclude: "^notebooks/"

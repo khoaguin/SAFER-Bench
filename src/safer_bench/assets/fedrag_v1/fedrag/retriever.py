@@ -1,11 +1,7 @@
 """fedrag: A Flower Federated RAG app."""
 
-import warnings
-
-# Suppress deprecation warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 import json
+import warnings
 from collections import OrderedDict
 from pathlib import Path
 
@@ -13,9 +9,11 @@ import faiss
 import numpy as np
 import yaml
 from sentence_transformers import SentenceTransformer
-from sentence_transformers import util as st_util
 from tqdm import tqdm
 from typing_extensions import Tuple
+
+# Suppress deprecation warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 DIR_PATH = Path(__file__).resolve().parent
 FAISS_DEFAULT_CONFIG = DIR_PATH / "retriever.yaml"
@@ -27,7 +25,6 @@ class Retriever:
             self.config = yaml.safe_load(open(FAISS_DEFAULT_CONFIG, "r"))
         else:
             self.config = yaml.safe_load(open(config_file, "r"))
-        device = st_util.get_device_name()
         # load the embedding model and define the embeddings dimensions
         # for the device placement of the SentenceTransformers model we resort
         # to use the device name returned by `sentence_transformers.util.get_device_name()`

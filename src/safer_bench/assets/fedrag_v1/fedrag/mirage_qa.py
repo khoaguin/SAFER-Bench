@@ -1,6 +1,5 @@
-"""fedrag: A Flower Federated RAG app."""
+"""fedrag: A Flower Federated RAG app.
 
-"""
 This file is a modified copy of the https://github.com/Teddy-XiongGZ/MIRAGE/blob/main/src/utils.py
 script located in the MIRAGE toolkit.
 """
@@ -26,9 +25,9 @@ class MirageQA:
         return len(self.dataset)
 
     def __getitem__(self, key):
-        if type(key) == int:
+        if isinstance(key, int):
             return self.dataset[self.index[key]]
-        elif type(key) == slice:
+        elif isinstance(key, slice):
             return [self.__getitem__(i) for i in range(self.__len__())[key]]
         else:
             raise KeyError("Key type not supported.")
