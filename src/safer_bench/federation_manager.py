@@ -395,9 +395,9 @@ class FederationManager:
         )
 
         # Create process pool for DO jobs (one process per DO)
-        max_workers = len(jobs_processing_results.approved_jobs)
+        num_approved_jobs = len(jobs_processing_results.approved_jobs)
         with concurrent.futures.ProcessPoolExecutor(
-            max_workers=max_workers
+            max_workers=num_approved_jobs
         ) as process_pool:
             # Start DS server task (will run until completion)
             logger.info("Starting DS aggregator server...")
@@ -407,19 +407,20 @@ class FederationManager:
 
             # Start DO client tasks (will run in passive mode, listening for queries)
             logger.info("Starting DO clients...")
-            do_tasks = [
-                asyncio.create_task(self._run_single_do_job(job_info, process_pool))
-                for job_info in jobs_processing_results.approved_jobs
-            ]
+            do_tasks = []
+            for job_info in jobs_processing_results.approved_jobs:
+                do_tasks.append(
+                    asyncio.create_task(self._run_single_do_job(job_info, process_pool))
+                )
 
             # Wait for DS server to complete
             ds_result = await ds_task
 
             # Cancel all DO tasks when DS completes (following syft_flwr pattern)
             logger.debug("DS server completed, cancelling DO client tasks...")
-            for task in do_tasks:
-                if not task.done():
-                    task.cancel()
+            for do_task in do_tasks:
+                if not do_task.done():
+                    do_task.cancel()
 
             # Gather DO results (with exceptions handled)
             do_results = await asyncio.gather(*do_tasks, return_exceptions=True)
@@ -512,6 +513,45 @@ class FederationManager:
             job_info.error = str(e)
             return job_info
 
+    def _log_ds_server_output(
+        self, stdout: str, stderr: str, success: bool = True
+    ) -> None:
+        """Log DS server stdout/stderr output.
+
+        Args:
+            stdout: Server stdout output
+            stderr: Server stderr output
+            success: Whether server execution was successful
+        """
+        if success:
+            # Log stdout results at info level (contains FedRAG metrics)
+            if stdout.strip():
+                logger.info("📊 DS Server Results:")
+                for line in stdout.strip().split("\n"):
+                    if line.strip():
+                        logger.info(f"   {line}")
+
+            # Log stderr at debug level if present
+            if stderr.strip():
+                logger.debug("DS server stderr:")
+                for line in stderr.strip().split("\n"):
+                    if line.strip():
+                        logger.debug(f"   {line}")
+        else:
+            # On failure, log stderr at error level for diagnostics
+            if stderr.strip():
+                logger.error("DS server stderr:")
+                for line in stderr.strip().split("\n"):
+                    if line.strip():
+                        logger.error(f"   {line}")
+
+            # Log stdout at debug level (may contain partial results)
+            if stdout.strip():
+                logger.debug("DS server stdout:")
+                for line in stdout.strip().split("\n"):
+                    if line.strip():
+                        logger.debug(f"   {line}")
+
     async def _run_ds_aggregator_server(
         self, fedrag_project_path: Path
     ) -> Dict[str, Any]:
@@ -534,30 +574,36 @@ class FederationManager:
                 "uv",
                 "run",
                 str(main_py_path),
-                "--active",
+                "--active",  # Use python directly from the parent project's venv
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=fedrag_project_path,
             )
 
             stdout, stderr = await process.communicate()
+            stdout_str = stdout.decode()
+            stderr_str = stderr.decode()
 
             if process.returncode == 0:
                 logger.success("✅ DS aggregator server completed successfully")
+                self._log_ds_server_output(stdout_str, stderr_str, success=True)
+
                 return {
                     "status": "success",
-                    "stdout": stdout.decode(),
-                    "stderr": stderr.decode(),
+                    "stdout": stdout_str,
+                    "stderr": stderr_str,
                 }
             else:
                 logger.error(
                     f"❌ DS aggregator server failed with code {process.returncode}"
                 )
+                self._log_ds_server_output(stdout_str, stderr_str, success=False)
+
                 return {
                     "status": "failed",
                     "returncode": process.returncode,
-                    "stdout": stdout.decode(),
-                    "stderr": stderr.decode(),
+                    "stdout": stdout_str,
+                    "stderr": stderr_str,
                 }
 
         except Exception as e:
@@ -795,6 +841,12 @@ def _run_do_job_in_process(do_email: str, job_uid: str, config_path: str) -> Non
         job_uid: Job UID to execute
         config_path: Path to SyftBox client config file
     """
+    # Disable verbose syft library logs in this process
+    logger.disable("syft_event")
+    logger.disable("syft_rds")
+    logger.disable("syft_crypto")
+    logger.disable("syft_flwr")
+
     # Set environment for this process
     os.environ["SYFTBOX_CLIENT_CONFIG_PATH"] = config_path
 

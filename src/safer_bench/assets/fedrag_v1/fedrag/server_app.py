@@ -15,6 +15,7 @@ from sklearn.metrics import accuracy_score
 from fedrag.llm_querier import LLMQuerier
 from fedrag.mirage_qa import MirageQA
 
+# TODO: Fix this path
 mirage_file = Path(
     "/Users/khoaguin/Desktop/projects/NISEC/safer-bench/datasets/mirage_qa.json"
 )
