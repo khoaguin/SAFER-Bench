@@ -66,5 +66,6 @@ show-config:
 clean:
     @echo -e "{{_yellow}}🧹 Cleaning up...{{_nc}}"
     rm -rf outputs/ multirun/ logs/ .pytest_cache/ .mypy_cache/ .ruff_cache/ safer_bench_network/
+    rm -rf .syftbox .server
     find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
     @echo -e "{{_green}}✅ Cleaned{{_nc}}"

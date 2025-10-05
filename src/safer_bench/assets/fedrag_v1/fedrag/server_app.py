@@ -15,7 +15,9 @@ from sklearn.metrics import accuracy_score
 from fedrag.llm_querier import LLMQuerier
 from fedrag.mirage_qa import MirageQA
 
-mirage_file = Path(__file__).parent.parent.parent / "datasets" / "mirage.json"
+mirage_file = Path(
+    "/Users/khoaguin/Desktop/projects/NISEC/safer-bench/datasets/mirage_qa.json"
+)
 
 
 def node_online_loop(grid: Grid) -> list[int]:

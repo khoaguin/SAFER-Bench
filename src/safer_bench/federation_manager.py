@@ -6,6 +6,7 @@ Handles SyftBox network initialization and data owner registration.
 import os
 import asyncio
 import random
+import concurrent.futures
 from pathlib import Path
 from typing_extensions import Dict, List, Any, Optional
 
@@ -26,6 +27,8 @@ from safer_bench.models import (
     DatasetUploadInfo,
     DatasetUploadResult,
     FederationInfo,
+    DSServerResult,
+    FedRAGExecutionResult,
 )
 
 
@@ -370,19 +373,19 @@ class FederationManager:
             approval_rate=approval_rate,
         )
 
-    async def dos_run_fedrag_jobs(
+    async def run_fedrag_jobs(
         self,
-        federation_info: FederationInfo,
         jobs_processing_results: JobProcessingResult,
-    ) -> List[JobInfo]:
-        """Run FedRAG jobs on all approved data owners.
+        fedrag_project_path: Path,
+    ) -> FedRAGExecutionResult:
+        """Run FedRAG jobs on all approved data owners in parallel, with DS server running concurrently.
 
         Args:
-            federation_info: Federation setup information
             jobs_processing_results: JobProcessingResult with approved jobs
+            fedrag_project_path: Path to the prepared FedRAG project
 
         Returns:
-            List of JobInfo with updated job statuses and results
+            FedRAGExecutionResult with execution metrics and results
         """
         if not self.is_setup:
             raise RuntimeError("Federation not setup. Call setup() first.")
@@ -391,7 +394,175 @@ class FederationManager:
             f"🚀 Running FedRAG jobs on {len(jobs_processing_results.approved_jobs)} approved data owners"
         )
 
-        pass
+        # Create process pool for DO jobs (one process per DO)
+        max_workers = len(jobs_processing_results.approved_jobs)
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=max_workers
+        ) as process_pool:
+            # Start DS server task (will run until completion)
+            logger.info("Starting DS aggregator server...")
+            ds_task = asyncio.create_task(
+                self._run_ds_aggregator_server(fedrag_project_path)
+            )
+
+            # Start DO client tasks (will run in passive mode, listening for queries)
+            logger.info("Starting DO clients...")
+            do_tasks = [
+                asyncio.create_task(self._run_single_do_job(job_info, process_pool))
+                for job_info in jobs_processing_results.approved_jobs
+            ]
+
+            # Wait for DS server to complete
+            ds_result = await ds_task
+
+            # Cancel all DO tasks when DS completes (following syft_flwr pattern)
+            logger.debug("DS server completed, cancelling DO client tasks...")
+            for task in do_tasks:
+                if not task.done():
+                    task.cancel()
+
+            # Gather DO results (with exceptions handled)
+            do_results = await asyncio.gather(*do_tasks, return_exceptions=True)
+
+        # Process DO results
+        updated_jobs = []
+        for idx, result in enumerate(do_results):
+            if isinstance(result, asyncio.CancelledError):
+                # DO was cancelled after DS completed - this is expected
+                job_info = jobs_processing_results.approved_jobs[idx]
+                job_info.status = JobProcessingStatus.approved
+                updated_jobs.append(job_info)
+                logger.debug(
+                    f"DO client {job_info.do_email} cancelled after DS completion"
+                )
+            elif isinstance(result, Exception):
+                job_info = jobs_processing_results.approved_jobs[idx]
+                job_info.status = JobProcessingStatus.processing_failed
+                job_info.error = str(result)
+                updated_jobs.append(job_info)
+            else:
+                updated_jobs.append(result)
+
+        successful_count = len(
+            [j for j in updated_jobs if j.status == JobProcessingStatus.approved]
+        )
+        failed_count = len(updated_jobs) - successful_count
+        logger.success(f"✅ Completed {successful_count}/{len(updated_jobs)} DO jobs")
+
+        # Convert ds_result dict to DSServerResult model
+        if isinstance(ds_result, Exception):
+            ds_server_result = DSServerResult(
+                status="error",
+                error=str(ds_result),
+            )
+        else:
+            ds_server_result = DSServerResult(**ds_result)
+
+        # Create and return FedRAGExecutionResult
+        return FedRAGExecutionResult(
+            total_jobs=len(updated_jobs),
+            successful_jobs=successful_count,
+            failed_jobs=failed_count,
+            job_results=updated_jobs,
+            ds_server_result=ds_server_result,
+            success_rate=successful_count / len(updated_jobs) if updated_jobs else 0.0,
+        )
+
+    async def _run_single_do_job(
+        self, job_info: JobInfo, process_pool: concurrent.futures.ProcessPoolExecutor
+    ) -> JobInfo:
+        """Run a single DO job on private data using run_private() in a separate process.
+
+        Args:
+            job_info: JobInfo for the job to run
+            process_pool: ProcessPoolExecutor for running job in separate process
+
+        Returns:
+            Updated JobInfo with execution results
+        """
+        try:
+            logger.info(f"Running DO job for {job_info.do_email}...")
+
+            # Get DO's config path from stack
+            do_stack = self.do_stacks[job_info.do_email]
+            config_path = str(do_stack.client.config_path)
+
+            # Run in process pool executor (each process gets its own environment)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                process_pool,
+                _run_do_job_in_process,
+                job_info.do_email,
+                str(job_info.job.uid),
+                config_path,
+            )
+
+            # Update job info
+            job_info.status = JobProcessingStatus.approved
+            logger.success(f"✅ DO job completed for {job_info.do_email}")
+            return job_info
+
+        except asyncio.CancelledError:
+            logger.debug(f"DO job for {job_info.do_email} cancelled (DS completed)")
+            job_info.status = JobProcessingStatus.approved
+            return job_info
+        except Exception as e:
+            logger.error(f"❌ Failed to run DO job for {job_info.do_email}: {e}")
+            job_info.status = JobProcessingStatus.processing_failed
+            job_info.error = str(e)
+            return job_info
+
+    async def _run_ds_aggregator_server(
+        self, fedrag_project_path: Path
+    ) -> Dict[str, Any]:
+        """Run DS aggregator FL server.
+
+        Args:
+            fedrag_project_path: Path to the FedRAG project
+
+        Returns:
+            Dictionary with server execution results
+        """
+        try:
+            logger.info("Starting DS aggregator FL server...")
+
+            main_py_path = fedrag_project_path / "main.py"
+            if not main_py_path.exists():
+                raise FileNotFoundError(f"main.py not found at {main_py_path}")
+
+            process = await asyncio.create_subprocess_exec(
+                "uv",
+                "run",
+                str(main_py_path),
+                "--active",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=fedrag_project_path,
+            )
+
+            stdout, stderr = await process.communicate()
+
+            if process.returncode == 0:
+                logger.success("✅ DS aggregator server completed successfully")
+                return {
+                    "status": "success",
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                }
+            else:
+                logger.error(
+                    f"❌ DS aggregator server failed with code {process.returncode}"
+                )
+                return {
+                    "status": "failed",
+                    "returncode": process.returncode,
+                    "stdout": stdout.decode(),
+                    "stderr": stderr.decode(),
+                }
+
+        except Exception as e:
+            logger.error(f"❌ Failed to run DS aggregator server: {e}")
+            return {"status": "error", "error": str(e)}
 
     async def _upload_single_dataset(self, do_info: DataOwnerInfo) -> DatasetUploadInfo:
         """Upload dataset for a single data owner.
@@ -611,3 +782,31 @@ class FederationManager:
                 do_client.is_admin
             ), f"{do_info.email} should be admin on their datasite"
             logger.debug(f"✅ {do_info.email} is admin on their datasite")
+
+
+def _run_do_job_in_process(do_email: str, job_uid: str, config_path: str) -> None:
+    """Run DO job in a separate process.
+
+    This function must be at module level to be picklable by ProcessPoolExecutor.
+    Each process gets its own environment and reconstructs the DO client.
+
+    Args:
+        do_email: Data owner email
+        job_uid: Job UID to execute
+        config_path: Path to SyftBox client config file
+    """
+    # Set environment for this process
+    os.environ["SYFTBOX_CLIENT_CONFIG_PATH"] = config_path
+
+    # Load SyftBox client from config
+    syftbox_client = SyftBoxClient.load(Path(config_path))
+
+    # Create RDS stack with the loaded client
+    do_stack = SingleRDSStack(client=syftbox_client)
+
+    # Initialize session as admin on own datasite
+    do_client = do_stack.init_session(host=do_email)
+
+    # Get and run the job
+    job = do_client.job.get(job_uid)
+    do_client.run_private(job)

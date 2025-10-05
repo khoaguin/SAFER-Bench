@@ -118,3 +118,26 @@ class DatasetUploadResult(BaseModel):
         default_factory=list, description="Failed uploads"
     )
     success_rate: float = Field(..., ge=0.0, le=1.0, description="Success rate")
+
+
+class DSServerResult(BaseModel):
+    """Results from DS aggregator server execution."""
+
+    status: str = Field(..., description="Execution status (success/failed/error)")
+    returncode: Optional[int] = Field(None, description="Process return code")
+    stdout: Optional[str] = Field(None, description="Standard output")
+    stderr: Optional[str] = Field(None, description="Standard error")
+    error: Optional[str] = Field(None, description="Error message if failed")
+
+
+class FedRAGExecutionResult(BaseModel):
+    """Results from FedRAG job execution (DOs and DS)."""
+
+    total_jobs: int = Field(..., ge=0, description="Total number of jobs run")
+    successful_jobs: int = Field(..., ge=0, description="Number of successful DO jobs")
+    failed_jobs: int = Field(..., ge=0, description="Number of failed DO jobs")
+    job_results: List[JobInfo] = Field(..., description="Individual job results")
+    ds_server_result: DSServerResult = Field(
+        ..., description="DS aggregator server result"
+    )
+    success_rate: float = Field(..., ge=0.0, le=1.0, description="Job success rate")

@@ -100,15 +100,20 @@ class BenchmarkRunner:
                 f"{jobs_processing_results.num_rejected}/{jobs_processing_results.total} rejected"
             )
 
-            # Stage 6: Run federated RAG
+            # Stage 6: Run federated RAG (DOs and DS in parallel)
             logger.info("=" * 60)
-            logger.info("\033[1;35mStage 6/7: Data Owners run Federated RAG job\033[0m")
+            logger.info(
+                "\033[1;35mStage 6/7: Data Owners run FedRAG jobs + DS runs aggregator server\033[0m"
+            )
             logger.info("=" * 60)
-            fedrag_results = await self.federation_manager.dos_run_fedrag_jobs(
-                federation_info, jobs_processing_results
+            fedrag_results = await self.federation_manager.run_fedrag_jobs(
+                jobs_processing_results, fedrag_project
             )
             logger.success(
-                f"✅ FedRAG execution complete with results: {fedrag_results}"
+                f"✅ FedRAG execution complete: {fedrag_results.successful_jobs}/{fedrag_results.total_jobs} jobs succeeded"
+            )
+            logger.info(
+                f"   DS server status: {fedrag_results.ds_server_result.status}"
             )
 
             # # Stage 7: Collect and save metrics
