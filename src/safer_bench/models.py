@@ -1,4 +1,4 @@
-from typing_extensions import Optional, List, Any
+from typing_extensions import Optional, List, Any, Dict
 from enum import Enum
 
 from pydantic import BaseModel, Field, EmailStr, field_validator
@@ -141,3 +141,74 @@ class FedRAGExecutionResult(BaseModel):
         ..., description="DS aggregator server result"
     )
     success_rate: float = Field(..., ge=0.0, le=1.0, description="Job success rate")
+
+
+class DatasetMetrics(BaseModel):
+    """Metrics for a single dataset."""
+
+    total_questions: int = Field(..., ge=0, description="Total questions in dataset")
+    answered_questions: int = Field(..., ge=0, description="Questions answered")
+    accuracy: float = Field(..., ge=0.0, le=1.0, description="Accuracy score")
+    mean_query_time: Optional[float] = Field(
+        None, description="Mean query time in seconds"
+    )
+
+
+class OverallMetrics(BaseModel):
+    """Overall aggregated metrics across all datasets."""
+
+    total_questions: int = Field(..., ge=0, description="Total questions")
+    total_answered: int = Field(..., ge=0, description="Total answered")
+    weighted_accuracy: float = Field(
+        ..., ge=0.0, le=1.0, description="Weighted accuracy"
+    )
+    mean_query_time: Optional[float] = Field(
+        None, description="Mean query time in seconds"
+    )
+
+
+class BenchmarkMetadata(BaseModel):
+    """Metadata about the benchmark run."""
+
+    benchmark_id: str = Field(..., description="Unique benchmark identifier")
+    start_time: str = Field(..., description="Start time (ISO format)")
+    end_time: str = Field(..., description="End time (ISO format)")
+    duration_seconds: float = Field(..., ge=0.0, description="Duration in seconds")
+    configuration: Dict[str, Any] = Field(..., description="Benchmark configuration")
+
+
+class FederationMetrics(BaseModel):
+    """Federation configuration metrics."""
+
+    num_data_owners: int = Field(..., ge=1, description="Number of data owners")
+    data_owners: List[Dict[str, Any]] = Field(..., description="Data owner details")
+    aggregator: EmailStr = Field(..., description="Aggregator email")
+    network_key: str = Field(..., description="Network key")
+
+
+class ResultsMetrics(BaseModel):
+    """Results metrics containing per-dataset and overall metrics."""
+
+    per_dataset: Dict[str, DatasetMetrics] = Field(
+        ..., description="Per-dataset metrics"
+    )
+    overall: OverallMetrics = Field(..., description="Overall metrics")
+
+
+class ExecutionMetrics(BaseModel):
+    """Execution summary metrics."""
+
+    total_jobs: int = Field(..., ge=0, description="Total jobs")
+    successful_jobs: int = Field(..., ge=0, description="Successful jobs")
+    failed_jobs: int = Field(..., ge=0, description="Failed jobs")
+    success_rate: float = Field(..., ge=0.0, le=1.0, description="Success rate")
+    ds_server_status: str = Field(..., description="DS server status")
+
+
+class BenchmarkMetrics(BaseModel):
+    """Complete benchmark metrics and results."""
+
+    benchmark_metadata: BenchmarkMetadata = Field(..., description="Benchmark metadata")
+    federation: FederationMetrics = Field(..., description="Federation configuration")
+    results: ResultsMetrics = Field(..., description="Results metrics")
+    execution: ExecutionMetrics = Field(..., description="Execution metrics")

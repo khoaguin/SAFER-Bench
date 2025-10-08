@@ -481,7 +481,9 @@ class FederationManager:
             Updated JobInfo with execution results
         """
         try:
-            logger.debug(f"Starting DO client: {job_info.do_email}")
+            logger.debug(
+                f"Starting DO client: {job_info.do_email} in a separate process..."
+            )
 
             # Get DO's config path from stack
             do_stack = self.do_stacks[job_info.do_email]

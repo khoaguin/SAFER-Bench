@@ -6,14 +6,14 @@ Coordinates the entire federated RAG benchmarking workflow.
 import json
 from pathlib import Path
 from datetime import datetime
-from typing_extensions import Dict, Any, List
+from typing_extensions import List
 
 from omegaconf import DictConfig
 from loguru import logger
 
 from safer_bench.federation_manager import FederationManager, JobInfo
 from safer_bench.fedrag_adapter import FedRAGProjectAdapter
-from safer_bench.models import FedRAGExecutionResult
+from safer_bench.models import FedRAGExecutionResult, BenchmarkMetrics
 from safer_bench.metrics_collector import MetricsCollector
 
 
@@ -38,11 +38,11 @@ class BenchmarkRunner:
         self.fedrag_adapter.benchmark_id = self.benchmark_id
         self.metrics_collector = MetricsCollector(cfg)
 
-    async def run(self) -> Dict[str, Any]:
+    async def run(self) -> BenchmarkMetrics:
         """Execute the complete benchmark workflow.
 
         Returns:
-            Dictionary containing benchmark metrics and results
+            BenchmarkMetrics containing benchmark metrics and results
         """
         self.start_time = datetime.now()
         logger.info(f"🚀 Starting SaferBench run: {self.benchmark_id}")
@@ -153,6 +153,12 @@ class BenchmarkRunner:
             # Save results
             await self._save_results(metrics)
 
+            # Log summary to console
+            logger.info("\n" + "=" * 60)
+            logger.info("📊 BENCHMARK RESULTS SUMMARY")
+            logger.info("=" * 60)
+            logger.info("\n" + self._generate_summary(metrics))
+
             logger.success("=" * 60)
             logger.success(f"🎉 Benchmark complete! ID: {self.benchmark_id}")
             logger.success(f"📊 Results saved to: {self.cfg.evaluation.output_dir}")
@@ -175,7 +181,7 @@ class BenchmarkRunner:
                     f"   Network directory: {self.federation_manager.root_dir / self.federation_manager.network_key}"
                 )
 
-    async def _save_results(self, metrics: Dict):
+    async def _save_results(self, metrics: BenchmarkMetrics) -> None:
         """Save benchmark results to disk.
 
         Args:
@@ -187,14 +193,14 @@ class BenchmarkRunner:
         # Save detailed metrics as JSON
         metrics_file = output_dir / f"metrics_{self.benchmark_id}.json"
         with open(metrics_file, "w") as f:
-            json.dump(metrics, f, indent=2)
+            json.dump(metrics.model_dump(), f, indent=2)
 
         # Save summary as markdown
         summary_file = output_dir / f"summary_{self.benchmark_id}.md"
         with open(summary_file, "w") as f:
             f.write(self._generate_summary(metrics))
 
-    def _generate_summary(self, metrics: Dict) -> str:
+    def _generate_summary(self, metrics: BenchmarkMetrics) -> str:
         """Generate a markdown summary of benchmark results.
 
         Args:
@@ -203,19 +209,19 @@ class BenchmarkRunner:
         Returns:
             Markdown formatted summary
         """
-        overall = metrics["results"]["overall"]
-        per_dataset = metrics["results"]["per_dataset"]
-        execution = metrics["execution"]
+        overall = metrics.results.overall
+        per_dataset = metrics.results.per_dataset
+        execution = metrics.execution
 
         # Format per-dataset results
         dataset_results = []
         for dataset_name, dataset_metrics in per_dataset.items():
-            mean_time = dataset_metrics["mean_query_time"]
+            mean_time = dataset_metrics.mean_query_time
             mean_time_str = f"{mean_time:.2f}s" if mean_time is not None else "N/A"
             dataset_results.append(
                 f"  - **{dataset_name}**: "
-                f"Accuracy={dataset_metrics['accuracy']:.2%}, "
-                f"Questions={dataset_metrics['answered_questions']}/{dataset_metrics['total_questions']}, "
+                f"Accuracy={dataset_metrics.accuracy:.2%}, "
+                f"Questions={dataset_metrics.answered_questions}/{dataset_metrics.total_questions}, "
                 f"Mean Time={mean_time_str}"
             )
 
@@ -237,17 +243,17 @@ class BenchmarkRunner:
 - Approval Rate: {self.cfg.federation.approval.percentage * 100}%
 
 ### Overall Results
-- **Weighted Accuracy**: {overall['weighted_accuracy']:.2%}
-- **Total Questions**: {overall['total_answered']}/{overall['total_questions']} answered
-- **Mean Query Time**: {f"{overall['mean_query_time']:.2f}s" if overall['mean_query_time'] else "N/A"}
-- **Total Runtime**: {metrics['benchmark_metadata']['duration_seconds']:.2f}s
+- **Weighted Accuracy**: {overall.weighted_accuracy:.2%}
+- **Total Questions**: {overall.total_answered}/{overall.total_questions} answered
+- **Mean Query Time**: {f"{overall.mean_query_time:.2f}s" if overall.mean_query_time else "N/A"}
+- **Total Runtime**: {metrics.benchmark_metadata.duration_seconds:.2f}s
 
 ### Per-Dataset Results
 {dataset_results_str}
 
 ### Execution Summary
-- **Jobs**: {execution['successful_jobs']}/{execution['total_jobs']} successful ({execution['success_rate']:.1%})
-- **DS Server**: {execution['ds_server_status']}
+- **Jobs**: {execution.successful_jobs}/{execution.total_jobs} successful ({execution.success_rate:.1%})
+- **DS Server**: {execution.ds_server_status}
 
 ### Data Distribution
 {self._format_data_distribution()}

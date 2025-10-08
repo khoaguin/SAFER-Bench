@@ -9,7 +9,17 @@ from typing_extensions import Dict, Any
 from omegaconf import DictConfig, OmegaConf
 from loguru import logger
 
-from safer_bench.models import FederationInfo, FedRAGExecutionResult
+from safer_bench.models import (
+    FederationInfo,
+    FedRAGExecutionResult,
+    BenchmarkMetrics,
+    BenchmarkMetadata,
+    FederationMetrics,
+    ResultsMetrics,
+    DatasetMetrics,
+    OverallMetrics,
+    ExecutionMetrics,
+)
 
 
 class MetricsCollector:
@@ -111,7 +121,7 @@ class MetricsCollector:
         fedrag_results: FedRAGExecutionResult,
         start_time: datetime,
         end_time: datetime,
-    ) -> Dict[str, Any]:
+    ) -> BenchmarkMetrics:
         """Collect all metrics from the benchmark execution.
 
         Args:
@@ -121,35 +131,42 @@ class MetricsCollector:
             end_time: Benchmark end time
 
         Returns:
-            Complete metrics dictionary
+            Complete benchmark metrics
         """
         logger.info("Collecting benchmark metrics...")
 
         # Parse DS server output
-        per_dataset_metrics = {}
+        per_dataset_metrics_dict = {}
         if fedrag_results.ds_server_result.status == "success":
-            per_dataset_metrics = self.parse_ds_stdout(
+            per_dataset_metrics_dict = self.parse_ds_stdout(
                 fedrag_results.ds_server_result.stdout
             )
-            logger.debug(f"Parsed metrics for {len(per_dataset_metrics)} datasets")
+            logger.debug(f"Parsed metrics for {len(per_dataset_metrics_dict)} datasets")
         else:
             logger.warning("DS server failed, skipping metrics parsing")
 
         # Calculate overall metrics
-        overall_metrics = self.calculate_overall_metrics(per_dataset_metrics)
+        overall_metrics_dict = self.calculate_overall_metrics(per_dataset_metrics_dict)
 
-        # Build complete metrics dictionary
-        metrics = {
-            "benchmark_metadata": {
-                "benchmark_id": federation_info.benchmark_id,
-                "start_time": start_time.isoformat(),
-                "end_time": end_time.isoformat(),
-                "duration_seconds": (end_time - start_time).total_seconds(),
-                "configuration": OmegaConf.to_container(self.cfg, resolve=True),
-            },
-            "federation": {
-                "num_data_owners": federation_info.num_data_owners,
-                "data_owners": [
+        # Convert to Pydantic models
+        per_dataset_metrics = {
+            name: DatasetMetrics(**metrics)
+            for name, metrics in per_dataset_metrics_dict.items()
+        }
+        overall_metrics = OverallMetrics(**overall_metrics_dict)
+
+        # Build complete metrics model
+        metrics: BenchmarkMetrics = BenchmarkMetrics(
+            benchmark_metadata=BenchmarkMetadata(
+                benchmark_id=federation_info.benchmark_id,
+                start_time=start_time.isoformat(),
+                end_time=end_time.isoformat(),
+                duration_seconds=(end_time - start_time).total_seconds(),
+                configuration=OmegaConf.to_container(self.cfg, resolve=True),
+            ),
+            federation=FederationMetrics(
+                num_data_owners=federation_info.num_data_owners,
+                data_owners=[
                     {
                         "email": do.email,
                         "dataset": do.dataset,
@@ -157,21 +174,21 @@ class MetricsCollector:
                     }
                     for do in federation_info.data_owners
                 ],
-                "aggregator": federation_info.aggregator,
-                "network_key": federation_info.network_key,
-            },
-            "results": {
-                "per_dataset": per_dataset_metrics,
-                "overall": overall_metrics,
-            },
-            "execution": {
-                "total_jobs": fedrag_results.total_jobs,
-                "successful_jobs": fedrag_results.successful_jobs,
-                "failed_jobs": fedrag_results.failed_jobs,
-                "success_rate": fedrag_results.success_rate,
-                "ds_server_status": fedrag_results.ds_server_result.status,
-            },
-        }
+                aggregator=federation_info.aggregator,
+                network_key=federation_info.network_key,
+            ),
+            results=ResultsMetrics(
+                per_dataset=per_dataset_metrics,
+                overall=overall_metrics,
+            ),
+            execution=ExecutionMetrics(
+                total_jobs=fedrag_results.total_jobs,
+                successful_jobs=fedrag_results.successful_jobs,
+                failed_jobs=fedrag_results.failed_jobs,
+                success_rate=fedrag_results.success_rate,
+                ds_server_status=fedrag_results.ds_server_result.status,
+            ),
+        )
 
         logger.success("✅ Metrics collection complete")
         return metrics

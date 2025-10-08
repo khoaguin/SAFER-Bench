@@ -55,9 +55,7 @@ async def run_benchmark(cfg: DictConfig):
         metrics = await runner.run()
 
         logger.success("✨ Benchmark completed successfully!")
-        logger.info(
-            f"📊 Results: {metrics.get('benchmark_metadata', {}).get('benchmark_id', 'N/A')}"
-        )
+        logger.info(f"📊 Results: {metrics.benchmark_metadata.benchmark_id}")
 
         return metrics
 
