@@ -330,7 +330,8 @@ class FederationManager:
         random.shuffle(shuffled_jobs)
 
         # Approve first N jobs from shuffled list
-        num_to_approve = int(len(shuffled_jobs) * approval_rate)
+        # Use round() to properly round fractional approvals (e.g., 0.75 -> 1)
+        num_to_approve = round(len(shuffled_jobs) * approval_rate)
 
         for idx, job_info in enumerate(shuffled_jobs):
             do_email = job_info.do_email
@@ -391,7 +392,7 @@ class FederationManager:
             raise RuntimeError("Federation not setup. Call setup() first.")
 
         logger.info(
-            f"🚀 Running FedRAG jobs on {len(jobs_processing_results.approved_jobs)} approved data owners"
+            f"🚀 Running FedRAG: DS aggregator server + {len(jobs_processing_results.approved_jobs)} DO clients"
         )
 
         # Create process pool for DO jobs (one process per DO)
@@ -400,13 +401,11 @@ class FederationManager:
             max_workers=num_approved_jobs
         ) as process_pool:
             # Start DS server task (will run until completion)
-            logger.info("Starting DS aggregator server...")
             ds_task = asyncio.create_task(
                 self._run_ds_aggregator_server(fedrag_project_path)
             )
 
             # Start DO client tasks (will run in passive mode, listening for queries)
-            logger.info("Starting DO clients...")
             do_tasks = []
             for job_info in jobs_processing_results.approved_jobs:
                 do_tasks.append(
@@ -482,7 +481,7 @@ class FederationManager:
             Updated JobInfo with execution results
         """
         try:
-            logger.info(f"Running DO job for {job_info.do_email}...")
+            logger.debug(f"Starting DO client: {job_info.do_email}")
 
             # Get DO's config path from stack
             do_stack = self.do_stacks[job_info.do_email]
@@ -500,7 +499,7 @@ class FederationManager:
 
             # Update job info
             job_info.status = JobProcessingStatus.approved
-            logger.success(f"✅ DO job completed for {job_info.do_email}")
+            logger.debug(f"DO client completed: {job_info.do_email}")
             return job_info
 
         except asyncio.CancelledError:
@@ -564,7 +563,7 @@ class FederationManager:
             Dictionary with server execution results
         """
         try:
-            logger.info("Starting DS aggregator FL server...")
+            logger.debug("Starting DS's FL aggregator server in a subprocess...")
 
             main_py_path = fedrag_project_path / "main.py"
             if not main_py_path.exists():
@@ -580,13 +579,37 @@ class FederationManager:
                 cwd=fedrag_project_path,
             )
 
-            stdout, stderr = await process.communicate()
-            stdout_str = stdout.decode()
-            stderr_str = stderr.decode()
+            # Stream output in real-time while collecting it
+            stdout_lines: List[str] = []
+            stderr_lines: List[str] = []
+
+            async def read_stream(
+                stream: asyncio.StreamReader, lines_list: List[str], prefix: str = ""
+            ) -> None:
+                while True:
+                    line = await stream.readline()
+                    if not line:
+                        break
+                    line_str = line.decode().rstrip()
+                    lines_list.append(line_str)
+                    # Print to console in real-time
+                    if line_str:
+                        print(f"{prefix}{line_str}")
+
+            # Read both streams concurrently
+            await asyncio.gather(
+                read_stream(process.stdout, stdout_lines),
+                read_stream(process.stderr, stderr_lines),
+            )
+
+            # Wait for process to finish
+            await process.wait()
+
+            stdout_str = "\n".join(stdout_lines)
+            stderr_str = "\n".join(stderr_lines)
 
             if process.returncode == 0:
                 logger.success("✅ DS aggregator server completed successfully")
-                self._log_ds_server_output(stdout_str, stderr_str, success=True)
 
                 return {
                     "status": "success",
@@ -597,7 +620,6 @@ class FederationManager:
                 logger.error(
                     f"❌ DS aggregator server failed with code {process.returncode}"
                 )
-                self._log_ds_server_output(stdout_str, stderr_str, success=False)
 
                 return {
                     "status": "failed",

@@ -8,7 +8,7 @@ import yaml
 import tomli
 import tomli_w
 from pathlib import Path
-from typing_extensions import Dict, Optional
+from typing_extensions import Dict, List, Optional
 
 from omegaconf import DictConfig
 from loguru import logger
@@ -233,18 +233,25 @@ class FedRAGProjectAdapter:
 
         app_config["server-llm-use-gpu"] = str(llm_config.get("use_gpu", False)).lower()
 
-    def _bootstrap_syft_flwr(self, fedrag_path: Path, federation_info: FederationInfo):
+    def _bootstrap_syft_flwr(
+        self,
+        fedrag_path: Path,
+        federation_info: FederationInfo,
+        datasites: List[str] = None,
+    ):
         """Use syft-flwr's bootstrap to configure federation information.
         This will create the [tool.syft_flwr] section in pyproject.toml.
 
         Args:
             fedrag_path: Path to the FedRAG project
             federation_info: Federation information with aggregator and data owners
+            datasites: Optional list of datasite emails to use. If not provided, uses all DOs from federation_info.
         """
         try:
             # Extract aggregator and datasites from federation_info
             aggregator = federation_info.aggregator
-            datasites = [do.email for do in federation_info.data_owners]
+            if datasites is None:
+                datasites = [do.email for do in federation_info.data_owners]
 
             if not aggregator or not datasites:
                 logger.warning(
@@ -271,6 +278,50 @@ class FedRAGProjectAdapter:
             logger.error(f"Failed to bootstrap syft-flwr: {e}")
             # Continue without bootstrap - fallback to manual configuration if needed
             pass
+
+    def update_datasites_for_approved_jobs(
+        self, fedrag_path: Path, approved_do_emails: List[str]
+    ):
+        """Update pyproject.toml datasites list with only approved DOs.
+
+        This manually edits the [tool.syft_flwr].datasites list without re-bootstrapping,
+        which preserves the app_name and keeps job UIDs valid.
+
+        Args:
+            fedrag_path: Path to the FedRAG project
+            approved_do_emails: List of approved data owner emails
+        """
+        logger.info(
+            f"Updating pyproject.toml with {len(approved_do_emails)} approved DOs"
+        )
+
+        pyproject_path = fedrag_path / "pyproject.toml"
+        if not pyproject_path.exists():
+            logger.error(f"pyproject.toml not found at {pyproject_path}")
+            return
+
+        try:
+            # Read existing pyproject.toml
+            with open(pyproject_path, "rb") as f:
+                pyproject = tomli.load(f)
+
+            # Update datasites list in [tool.syft_flwr] section
+            if "tool" in pyproject and "syft_flwr" in pyproject["tool"]:
+                pyproject["tool"]["syft_flwr"]["datasites"] = approved_do_emails
+                logger.debug(f"Updated datasites: {approved_do_emails}")
+            else:
+                logger.warning("[tool.syft_flwr] section not found in pyproject.toml")
+                return
+
+            # Write back to file
+            with open(pyproject_path, "wb") as f:
+                tomli_w.dump(pyproject, f)
+
+            logger.success("✅ Updated pyproject.toml with approved DOs")
+
+        except Exception as e:
+            logger.error(f"Failed to update pyproject.toml: {e}")
+            raise
 
     def cleanup(self):
         """Clean up temporary directories."""

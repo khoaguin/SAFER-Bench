@@ -13,6 +13,8 @@ from loguru import logger
 
 from safer_bench.federation_manager import FederationManager, JobInfo
 from safer_bench.fedrag_adapter import FedRAGProjectAdapter
+from safer_bench.models import FedRAGExecutionResult
+from safer_bench.metrics_collector import MetricsCollector
 
 
 class BenchmarkRunner:
@@ -34,8 +36,7 @@ class BenchmarkRunner:
         self.federation_manager.benchmark_id = self.benchmark_id  # Set benchmark_id
         self.fedrag_adapter = FedRAGProjectAdapter(cfg)
         self.fedrag_adapter.benchmark_id = self.benchmark_id
-
-        # self.metrics_collector = MetricsCollector(cfg)
+        self.metrics_collector = MetricsCollector(cfg)
 
     async def run(self) -> Dict[str, Any]:
         """Execute the complete benchmark workflow.
@@ -49,7 +50,7 @@ class BenchmarkRunner:
         try:
             # Stage 1: Setup federation (DOs and DS datasites)
             logger.info("=" * 60)
-            logger.info("\033[1;35mStage 1/7: Setting up federation\033[0m")
+            logger.info("\033[1;35mStage 1/8: Setting up federation\033[0m")
             logger.info("=" * 60)
             federation_info = await self.federation_manager.setup_federation()
             logger.success(
@@ -58,7 +59,7 @@ class BenchmarkRunner:
 
             # Stage 2: Data owners create datasets
             logger.info("=" * 60)
-            logger.info("\033[1;35mStage 2/7: Data owners create datasets\033[0m")
+            logger.info("\033[1;35mStage 2/8: Data owners create datasets\033[0m")
             logger.info("=" * 60)
             datasets_upload_info = await self.federation_manager.dos_upload_datasets()
             self._log_dataset_upload_results(datasets_upload_info)
@@ -66,7 +67,7 @@ class BenchmarkRunner:
             # Stage 3: Data Scientist prepares FedRAG project with injected parameters
             logger.info("=" * 60)
             logger.info(
-                "\033[1;35mStage 3/7: Data Scientist prepares FedRAG project with benchmark parameters\033[0m"
+                "\033[1;35mStage 3/8: Data Scientist prepares FedRAG project with benchmark parameters\033[0m"
             )
             logger.info("=" * 60)
             fedrag_project = await self.fedrag_adapter.prepare_project(federation_info)
@@ -75,7 +76,7 @@ class BenchmarkRunner:
             # Stage 4: Data Scientist submits jobs to all data owners
             logger.info("=" * 60)
             logger.info(
-                "\033[1;35mStage 4/7: Data Scientist submits FedRAG jobs to data owners\033[0m"
+                "\033[1;35mStage 4/8: Data Scientist submits FedRAG jobs to data owners\033[0m"
             )
             logger.info("=" * 60)
             jobs_info = await self.federation_manager.ds_submits_jobs(
@@ -90,7 +91,7 @@ class BenchmarkRunner:
 
             # Stage 5: Data Owners review and approve jobs based on approval rate
             logger.info("=" * 60)
-            logger.info("\033[1;35mStage 5/7: Data Owners process jobs\033[0m")
+            logger.info("\033[1;35mStage 5/8: Data Owners process jobs\033[0m")
             logger.info("=" * 60)
             jobs_processing_results = await self.federation_manager.dos_process_jobs(
                 submitted_jobs_info, self.cfg.federation.approval.percentage
@@ -100,14 +101,33 @@ class BenchmarkRunner:
                 f"{jobs_processing_results.num_rejected}/{jobs_processing_results.total} rejected"
             )
 
-            # Stage 6: Run federated RAG (DOs and DS in parallel)
+            # Stage 6: DS updates FedRAG project's pyproject.toml with only approved DOs
             logger.info("=" * 60)
             logger.info(
-                "\033[1;35mStage 6/7: Data Owners run FedRAG jobs + DS runs aggregator server\033[0m"
+                "\033[1;35mStage 6/8: DS updates the FedRAG project pyproject.toml based on approved DOs\033[0m"
             )
             logger.info("=" * 60)
-            fedrag_results = await self.federation_manager.run_fedrag_jobs(
-                jobs_processing_results, fedrag_project
+            if jobs_processing_results.num_approved < jobs_processing_results.total:
+                logger.info(
+                    "Updating FedRAG project datasites with approved DOs only..."
+                )
+                approved_emails = [
+                    job.do_email for job in jobs_processing_results.approved_jobs
+                ]
+                self.fedrag_adapter.update_datasites_for_approved_jobs(
+                    fedrag_project, approved_emails
+                )
+
+            # Stage 7: Run federated RAG (DOs and DS in parallel)
+            logger.info("=" * 60)
+            logger.info(
+                "\033[1;35mStage 7/8: Data Owners run FedRAG jobs + DS runs aggregator server\033[0m"
+            )
+            logger.info("=" * 60)
+            fedrag_results: FedRAGExecutionResult = (
+                await self.federation_manager.run_fedrag_jobs(
+                    jobs_processing_results, fedrag_project
+                )
             )
             logger.success(
                 f"✅ FedRAG execution complete: {fedrag_results.successful_jobs}/{fedrag_results.total_jobs} jobs succeeded"
@@ -116,35 +136,29 @@ class BenchmarkRunner:
                 f"   DS server status: {fedrag_results.ds_server_result.status}"
             )
 
-            # # Stage 7: Collect and save metrics
-            # logger.info("=" * 60)
-            # logger.info("\033[1;35mStage 7/7: Data Scientist collects metrics and generating report\033[0m")
-            # logger.info("=" * 60)
-            # metrics = await self.metrics_collector.collect(
-            #     fedrag_results,
-            #     federation_info,
-            #     approval_results
-            # )
-            # metrics = {}
+            # Stage 8: Collect and save metrics
+            logger.info("=" * 60)
+            logger.info(
+                "\033[1;35mStage 8/8: Data Scientist collects metrics and generating report\033[0m"
+            )
+            logger.info("=" * 60)
+            self.end_time = datetime.now()
+            metrics = await self.metrics_collector.collect(
+                federation_info,
+                fedrag_results,
+                self.start_time,
+                self.end_time,
+            )
 
-            # self.end_time = datetime.now()
-            # metrics["benchmark_metadata"] = {
-            #     "benchmark_id": self.benchmark_id,
-            #     "start_time": self.start_time.isoformat(),
-            #     "end_time": self.end_time.isoformat(),
-            #     "duration_seconds": (self.end_time - self.start_time).total_seconds(),
-            #     "configuration": OmegaConf.to_container(self.cfg),
-            # }
-
-            # # Save results
-            # await self._save_results(metrics)
+            # Save results
+            await self._save_results(metrics)
 
             logger.success("=" * 60)
             logger.success(f"🎉 Benchmark complete! ID: {self.benchmark_id}")
             logger.success(f"📊 Results saved to: {self.cfg.evaluation.output_dir}")
             logger.success("=" * 60)
 
-            return {}
+            return metrics
 
         except Exception as e:
             logger.error(f"❌ Benchmark failed: {e}")
@@ -189,6 +203,26 @@ class BenchmarkRunner:
         Returns:
             Markdown formatted summary
         """
+        overall = metrics["results"]["overall"]
+        per_dataset = metrics["results"]["per_dataset"]
+        execution = metrics["execution"]
+
+        # Format per-dataset results
+        dataset_results = []
+        for dataset_name, dataset_metrics in per_dataset.items():
+            mean_time = dataset_metrics["mean_query_time"]
+            mean_time_str = f"{mean_time:.2f}s" if mean_time is not None else "N/A"
+            dataset_results.append(
+                f"  - **{dataset_name}**: "
+                f"Accuracy={dataset_metrics['accuracy']:.2%}, "
+                f"Questions={dataset_metrics['answered_questions']}/{dataset_metrics['total_questions']}, "
+                f"Mean Time={mean_time_str}"
+            )
+
+        dataset_results_str = (
+            "\n".join(dataset_results) if dataset_results else "  No results available"
+        )
+
         return f"""# SaferBench Results Summary
 
 ## Benchmark ID: {self.benchmark_id}
@@ -202,10 +236,18 @@ class BenchmarkRunner:
 - Dataset Mode: {"Subset" if self.cfg.dataset.use_subset else "Full"}
 - Approval Rate: {self.cfg.federation.approval.percentage * 100}%
 
-### Results
-- Accuracy: {metrics.get('accuracy', 'N/A')}
-- Mean Query Time: {metrics.get('mean_query_time', 'N/A')}s
-- Total Runtime: {metrics['benchmark_metadata']['duration_seconds']:.2f}s
+### Overall Results
+- **Weighted Accuracy**: {overall['weighted_accuracy']:.2%}
+- **Total Questions**: {overall['total_answered']}/{overall['total_questions']} answered
+- **Mean Query Time**: {f"{overall['mean_query_time']:.2f}s" if overall['mean_query_time'] else "N/A"}
+- **Total Runtime**: {metrics['benchmark_metadata']['duration_seconds']:.2f}s
+
+### Per-Dataset Results
+{dataset_results_str}
+
+### Execution Summary
+- **Jobs**: {execution['successful_jobs']}/{execution['total_jobs']} successful ({execution['success_rate']:.1%})
+- **DS Server**: {execution['ds_server_status']}
 
 ### Data Distribution
 {self._format_data_distribution()}

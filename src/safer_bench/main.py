@@ -2,6 +2,7 @@
 """Main entry point for SaferBench federated RAG benchmarking."""
 
 import asyncio
+import warnings
 from pathlib import Path
 
 import hydra
@@ -11,6 +12,9 @@ from loguru import logger
 
 from safer_bench.benchmark_runner import BenchmarkRunner
 from safer_bench.utils import display_config
+
+# Suppress Pydantic deprecation warnings from syft_rds
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="syft_rds.*")
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).parents[2]
