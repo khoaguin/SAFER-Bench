@@ -138,6 +138,7 @@ def main(grid: Grid, context: Context) -> None:
     model_name = context.run_config["server-llm-hfpath"]
     use_gpu = context.run_config.get("server-llm-use-gpu", False)
     use_gpu = True if use_gpu.lower() == "true" else False
+    max_new_tokens = int(context.run_config.get("server-llm-max-new-tokens", 50))
 
     if not mirage_file.exists():
         raise FileNotFoundError(f"Server: MirageQA dataset not found at {mirage_file}")
@@ -169,7 +170,7 @@ def main(grid: Grid, context: Context) -> None:
             answer = q["answer"]
 
             prompt, predicted_answer = llm_querier.answer(
-                question, merged_docs, options, dataset_name
+                question, merged_docs, options, dataset_name, max_new_tokens
             )
 
             # If the model did not predict any value,

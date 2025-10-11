@@ -2,7 +2,7 @@ defaults:
   - federation: local_2do
   - retriever: faiss_ivf
   - merger: rrf
-  - llm: qwen_small
+  - llm: smollm_1.7b
   - privacy: none
   - _self_
 
@@ -16,7 +16,7 @@ runtime:
 # QA Datasets
 qa:
   datasets: "pubmedqa|bioasq"
-  num_questions: 2  # Number of questions per dataset
+  num_questions: 10  # Number of questions per dataset. When run dry, will be 2
   query_types: ["factual", "reasoning", "comparative"]  # From README
 
 # Retrieval parameters

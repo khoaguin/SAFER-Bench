@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing_extensions import Optional
+from loguru import logger
 
 
 def get_dataset_path(
@@ -24,9 +25,13 @@ def get_dataset_path(
     base_dir = project_root_dir / "datasets"
 
     if use_subset:
-        return base_dir / "subsets" / dataset_name
+        path = base_dir / "subsets" / dataset_name
+        logger.debug(f"Using subset datasets. Looking for {dataset_name} in {path}.")
+        return path
     else:
-        return base_dir / "full" / dataset_name
+        path = base_dir / "full" / dataset_name
+        logger.debug(f"Using full datasets. Looking for {dataset_name} in {path}.")
+        return path
 
 
 def validate_dataset_exists(

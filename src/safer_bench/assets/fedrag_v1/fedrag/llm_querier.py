@@ -30,7 +30,7 @@ class LLMQuerier:
                 self.tokenizer.pad_token
             )
 
-    def answer(self, question, documents, options, dataset_name, max_new_tokens=10):
+    def answer(self, question, documents, options, dataset_name, max_new_tokens):
         # Format options as A) ... B) ... etc.
         formatted_options = "\n".join([f"{k}) {v}" for k, v in options.items()])
 

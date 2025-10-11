@@ -24,7 +24,7 @@ _nc := '\033[0m'
 # Development: quick run with data subsets (fast iteration)
 run-dry federation="local_2do":
     @echo -e "{{_cyan}}🚀 Running SAFER-Bench in SUBSET mode (fast) with {{federation}}...{{_nc}}"
-    uv run python src/safer_bench/main.py dataset.use_subset=true federation={{federation}}
+    uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 federation={{federation}}
 
 # Production: full benchmark with complete datasets
 run federation="local_2do":
@@ -34,7 +34,7 @@ run federation="local_2do":
 # Development: run with inspection (keep directories for debugging)
 run-dry-inspect federation="local_2do":
     @echo -e "{{_yellow}}🔍 Running SAFER-Bench with directories kept for inspection ({{federation}})...{{_nc}}"
-    uv run python src/safer_bench/main.py dataset.use_subset=true runtime.clean=false federation={{federation}}
+    uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 runtime.clean=false federation={{federation}}
 
 # Production: run with inspection (keep directories for debugging)
 run-inspect-full federation="local_2do":
