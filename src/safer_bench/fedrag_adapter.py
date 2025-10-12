@@ -169,6 +169,9 @@ class FedRAGProjectAdapter:
                 "num-supernodes"
             ] = num_dos
 
+        # Copy [tool.uv.sources] from main project for development dependencies
+        self._copy_uv_sources(pyproject)
+
         # Save updated configuration (without syft_flwr section - that will be handled by bootstrap)
         with open(pyproject_path, "wb") as f:
             tomli_w.dump(pyproject, f)
@@ -233,6 +236,53 @@ class FedRAGProjectAdapter:
 
         app_config["server-llm-use-gpu"] = str(llm_config.get("use_gpu", False)).lower()
         app_config["server-llm-max-new-tokens"] = llm_config.get("max_new_tokens", 50)
+
+    def _copy_uv_sources(self, pyproject: Dict):
+        """Copy [tool.uv.sources] from main project to FedRAG project.
+
+        This ensures DOs use the same development dependencies as the main project,
+        such as local editable installs of syft-flwr.
+
+        Args:
+            pyproject: FedRAG project's pyproject.toml dictionary to update
+        """
+        try:
+            # Find the main safer-bench pyproject.toml
+            main_pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
+
+            if not main_pyproject_path.exists():
+                logger.warning(
+                    f"Main pyproject.toml not found at {main_pyproject_path}. "
+                    "Skipping [tool.uv.sources] copy."
+                )
+                return
+
+            # Load main project configuration
+            with open(main_pyproject_path, "rb") as f:
+                main_pyproject = tomli.load(f)
+
+            # Copy [tool.uv.sources] if it exists
+            if "tool" in main_pyproject and "uv" in main_pyproject["tool"]:
+                if "sources" in main_pyproject["tool"]["uv"]:
+                    # Ensure tool.uv section exists in FedRAG project
+                    pyproject.setdefault("tool", {}).setdefault("uv", {})
+
+                    # Copy the sources
+                    pyproject["tool"]["uv"]["sources"] = main_pyproject["tool"]["uv"][
+                        "sources"
+                    ]
+
+                    logger.debug(
+                        f"Copied [tool.uv.sources] to FedRAG project: "
+                        f"{main_pyproject['tool']['uv']['sources']}"
+                    )
+            else:
+                logger.debug("No [tool.uv.sources] found in main project")
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to copy [tool.uv.sources]: {e}. Continuing without it."
+            )
 
     def _bootstrap_syft_flwr(
         self,

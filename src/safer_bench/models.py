@@ -1,10 +1,13 @@
-from typing_extensions import Optional, List, Any, Dict
+from typing_extensions import Optional, List, Any, Dict, Annotated
 from enum import Enum
 
 from pydantic import BaseModel, Field, EmailStr, field_validator
 
 from syft_rds.client.rds_client import RDSClient
 from syft_rds.models import Job
+
+# Custom types for reusable validation
+Percentage = Annotated[float, Field(ge=0.0, le=1.0)]
 
 
 class DataOwnerInfo(BaseModel):
@@ -78,7 +81,7 @@ class JobProcessingResult(BaseModel):
     approved_jobs: List[JobInfo]
     rejected_jobs: List[JobInfo]
     processing_failed_jobs: List[JobInfo]
-    approval_rate: float = Field(..., ge=0.0, le=1.0)
+    approval_rate: Percentage
 
 
 class DatasetUploadStatus(str, Enum):
@@ -86,6 +89,14 @@ class DatasetUploadStatus(str, Enum):
 
     success = "success"
     failed = "failed"
+
+
+class DSServerStatus(str, Enum):
+    """Enumeration of DS server execution statuses."""
+
+    success = "success"
+    failed = "failed"
+    error = "error"
 
 
 class DatasetUploadInfo(BaseModel):
@@ -117,13 +128,13 @@ class DatasetUploadResult(BaseModel):
     failed: List[DatasetUploadInfo] = Field(
         default_factory=list, description="Failed uploads"
     )
-    success_rate: float = Field(..., ge=0.0, le=1.0, description="Success rate")
+    success_rate: Percentage = Field(..., description="Success rate")
 
 
 class DSServerResult(BaseModel):
     """Results from DS aggregator server execution."""
 
-    status: str = Field(..., description="Execution status (success/failed/error)")
+    status: DSServerStatus = Field(..., description="Execution status")
     returncode: Optional[int] = Field(None, description="Process return code")
     stdout: Optional[str] = Field(None, description="Standard output")
     stderr: Optional[str] = Field(None, description="Standard error")
@@ -140,7 +151,7 @@ class FedRAGExecutionResult(BaseModel):
     ds_server_result: DSServerResult = Field(
         ..., description="DS aggregator server result"
     )
-    success_rate: float = Field(..., ge=0.0, le=1.0, description="Job success rate")
+    success_rate: Percentage = Field(..., description="Job success rate")
 
 
 class DatasetMetrics(BaseModel):
@@ -148,7 +159,7 @@ class DatasetMetrics(BaseModel):
 
     total_questions: int = Field(..., ge=0, description="Total questions in dataset")
     answered_questions: int = Field(..., ge=0, description="Questions answered")
-    accuracy: float = Field(..., ge=0.0, le=1.0, description="Accuracy score")
+    accuracy: Percentage = Field(..., description="Accuracy score")
     mean_query_time: Optional[float] = Field(
         None, description="Mean query time in seconds"
     )
@@ -159,9 +170,7 @@ class OverallMetrics(BaseModel):
 
     total_questions: int = Field(..., ge=0, description="Total questions")
     total_answered: int = Field(..., ge=0, description="Total answered")
-    weighted_accuracy: float = Field(
-        ..., ge=0.0, le=1.0, description="Weighted accuracy"
-    )
+    weighted_accuracy: Percentage = Field(..., description="Weighted accuracy")
     mean_query_time: Optional[float] = Field(
         None, description="Mean query time in seconds"
     )
@@ -195,14 +204,43 @@ class ResultsMetrics(BaseModel):
     overall: OverallMetrics = Field(..., description="Overall metrics")
 
 
+class TimingBreakdown(BaseModel):
+    """Detailed timing breakdown for efficiency analysis."""
+
+    retrieval_time: Optional[float] = Field(
+        None, ge=0.0, description="Federated document retrieval time (seconds)"
+    )
+    merge_time: Optional[float] = Field(
+        None, ge=0.0, description="Document merging (RRF) time (seconds)"
+    )
+    generation_time: Optional[float] = Field(
+        None, ge=0.0, description="LLM inference time (seconds)"
+    )
+    total_query_time: Optional[float] = Field(
+        None, ge=0.0, description="End-to-end query time (seconds)"
+    )
+    queries_per_second: Optional[float] = Field(
+        None, ge=0.0, description="Throughput (QPS)"
+    )
+    communication_time: Optional[float] = Field(
+        None, ge=0.0, description="Network time for federated retrieval (seconds)"
+    )
+    communication_ratio: Optional[Percentage] = Field(
+        None, description="Network time / total query time"
+    )
+
+
 class ExecutionMetrics(BaseModel):
     """Execution summary metrics."""
 
     total_jobs: int = Field(..., ge=0, description="Total jobs")
     successful_jobs: int = Field(..., ge=0, description="Successful jobs")
     failed_jobs: int = Field(..., ge=0, description="Failed jobs")
-    success_rate: float = Field(..., ge=0.0, le=1.0, description="Success rate")
+    success_rate: Percentage = Field(..., description="Success rate")
     ds_server_status: str = Field(..., description="DS server status")
+    timing: Optional[TimingBreakdown] = Field(
+        None, description="Timing breakdown for efficiency analysis"
+    )
 
 
 class BenchmarkMetrics(BaseModel):

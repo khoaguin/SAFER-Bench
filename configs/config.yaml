@@ -28,30 +28,36 @@ retrieval:
 
 # Evaluation settings
 evaluation:
-  # Quality metrics
-  retrieval_metrics:
-    - precision_at_k
-    - recall_at_k
-    - mrr
-    - ndcg
-  generation_metrics:
-    - rouge
-    - bertscore
-    - exact_match
-    - answer_correctness
-    - faithfulness
-    - relevance
-  # Efficiency metrics
+  # Quality metrics for multiple-choice QA
+  accuracy_metrics:
+    - overall_accuracy        # Weighted accuracy across datasets
+    - per_dataset_accuracy    # Accuracy for each dataset
+    - per_option_accuracy     # Accuracy breakdown by option (A/B/C/D)
+    - confusion_matrix        # Expected vs Predicted distribution
+    - option_distribution     # Which options the model selects most often
+
+  # Efficiency metrics (timing breakdown)
   efficiency_metrics:
-    - retrieval_time
-    - merge_time
-    - generation_time
-    - queries_per_second
-    - memory_usage
-  # Privacy-utility metrics
+    - retrieval_time          # Federated document retrieval time
+    - merge_time              # Document merging (RRF) time
+    - generation_time         # LLM inference time
+    - total_query_time        # End-to-end query time
+    - queries_per_second      # Throughput
+
+  # Privacy-utility tradeoff metrics (FEDERATED-SPECIFIC)
   privacy_metrics:
-    - approval_rate
-    - accuracy_drop_with_privacy
+    - approval_rate           # Percentage of DOs that approved jobs
+    - accuracy_drop_with_privacy  # Accuracy loss compared to 100% approval baseline
+
+  # Federation-specific metrics
+  federation_metrics:
+    - federation_size         # Number of participating DOs
+    - participation_rate      # % of DOs that responded to queries
+    - communication_time      # Network time for federated retrieval
+    - communication_ratio     # Network time / total query time
+    - per_do_contribution     # % of final documents from each DO
+    - data_source_diversity   # Number of unique sources in merged docs
+    - merge_strategy_impact   # Comparison of merging strategies (future)
 
   seed: 42
   output_dir: "outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}/${federation.name}"
