@@ -151,6 +151,16 @@ def main(grid: Grid, context: Context) -> None:
         defaultdict(list),
         defaultdict(int),
     )
+
+    # Accuracy breakdown tracking
+    option_correct = defaultdict(lambda: defaultdict(int))  # [dataset][option] = count
+    option_total = defaultdict(lambda: defaultdict(int))  # [dataset][option] = count
+    option_predictions = defaultdict(
+        lambda: defaultdict(int)
+    )  # [dataset][option] = count
+    confusion_matrix = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(int))
+    )  # [dataset][expected][predicted] = count
     for dataset_name in qa_datasets:
         q_idx = 0
         print("Evaluating Dataset: [{:s}] ".format(dataset_name))
@@ -181,6 +191,13 @@ def main(grid: Grid, context: Context) -> None:
                 q_et = time.time()
                 q_time = q_et - q_st  # elapsed time in seconds
                 question_times[dataset_name].append(q_time)
+
+                # Track accuracy breakdown metrics
+                option_total[dataset_name][answer] += 1
+                option_predictions[dataset_name][predicted_answer] += 1
+                if predicted_answer == answer:
+                    option_correct[dataset_name][answer] += 1
+                confusion_matrix[dataset_name][answer][predicted_answer] += 1
             else:
                 unanswered_questions[dataset_name] += 1
 
@@ -208,3 +225,45 @@ def main(grid: Grid, context: Context) -> None:
             f"Accuracy: {accuracy} \n"
             f"Mean Querying Time: {elapsed_time} \n"
         )
+
+        # Print accuracy breakdown
+        if len(pred_ans) > 0:
+            print(f"Accuracy Breakdown: {dataset_name}")
+
+            # Per-option accuracy
+            print("Per-Option Accuracy:")
+            all_options = sorted(
+                set(
+                    list(option_total[dataset_name].keys())
+                    + list(option_predictions[dataset_name].keys())
+                )
+            )
+            for option in all_options:
+                correct = option_correct[dataset_name].get(option, 0)
+                total = option_total[dataset_name].get(option, 0)
+                acc = correct / total if total > 0 else 0.0
+                print(f"  Option {option}: {acc:.4f} ({correct}/{total})")
+
+            # Option distribution (predictions)
+            print("Option Distribution (Predicted):")
+            total_predictions = sum(option_predictions[dataset_name].values())
+            if total_predictions > 0:
+                option_percentages = []
+                for option in all_options:
+                    count = option_predictions[dataset_name].get(option, 0)
+                    percentage = (count / total_predictions) * 100
+                    option_percentages.append(f"{option}: {percentage:.1f}%")
+                print("  " + ", ".join(option_percentages))
+
+            # Confusion Matrix
+            print("Confusion Matrix:")
+            print("       " + "    ".join(all_options))
+            for expected_opt in all_options:
+                row_values = []
+                for predicted_opt in all_options:
+                    count = confusion_matrix[dataset_name][expected_opt].get(
+                        predicted_opt, 0
+                    )
+                    row_values.append(f"{count:4d}")
+                print(f"{expected_opt}  " + "  ".join(row_values))
+            print()  # Empty line for separation

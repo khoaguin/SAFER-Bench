@@ -165,6 +165,47 @@ class DatasetMetrics(BaseModel):
     )
 
 
+class PerOptionAccuracy(BaseModel):
+    """Accuracy breakdown by multiple-choice option."""
+
+    option: str = Field(..., description="Option label (A/B/C/D)")
+    accuracy: Percentage = Field(..., description="Accuracy for this option")
+    correct: int = Field(..., ge=0, description="Number of correct predictions")
+    total: int = Field(..., ge=0, description="Total questions with this answer")
+
+
+class OptionDistribution(BaseModel):
+    """Distribution of predicted options."""
+
+    option_counts: Dict[str, int] = Field(..., description="Count per option")
+    option_percentages: Dict[str, Percentage] = Field(
+        ..., description="Percentage per option"
+    )
+
+
+class ConfusionMatrix(BaseModel):
+    """Confusion matrix for multiple-choice QA."""
+
+    matrix: Dict[str, Dict[str, int]] = Field(
+        ..., description="Expected (row) vs Predicted (col) counts"
+    )
+
+
+class AccuracyBreakdown(BaseModel):
+    """Complete accuracy analysis for a dataset."""
+
+    overall_accuracy: Percentage = Field(..., description="Overall accuracy")
+    per_option: List[PerOptionAccuracy] = Field(
+        ..., description="Accuracy breakdown by option"
+    )
+    option_distribution: OptionDistribution = Field(
+        ..., description="Distribution of predicted options"
+    )
+    confusion_matrix: ConfusionMatrix = Field(
+        ..., description="Confusion matrix (expected vs predicted)"
+    )
+
+
 class OverallMetrics(BaseModel):
     """Overall aggregated metrics across all datasets."""
 
@@ -202,6 +243,9 @@ class ResultsMetrics(BaseModel):
         ..., description="Per-dataset metrics"
     )
     overall: OverallMetrics = Field(..., description="Overall metrics")
+    accuracy_breakdown: Optional[Dict[str, AccuracyBreakdown]] = Field(
+        None, description="Detailed accuracy analysis per dataset"
+    )
 
 
 class TimingBreakdown(BaseModel):

@@ -4,6 +4,10 @@ SAFER-Bench is a comprehensive benchmark framework for evaluating Federated Retr
 
 ![safer-bench-architecture](./docs/images/architecture.png)
 
+### Research Questions
+- How do we qualify data sources without having access to them?
+- How to remove a low-quality data source in the federation setting?
+
 ### Benchmarking Dimensions
 #### Baseline Comparison
 - Consider comparing against centralized RAG and simple federated approaches without approval mechanisms to quantify privacy-utility tradeoffs
