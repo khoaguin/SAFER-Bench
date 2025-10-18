@@ -9,13 +9,14 @@ import random
 import concurrent.futures
 from pathlib import Path
 from typing_extensions import Dict, List, Any, Optional
+import shutil
+import time
 
 from omegaconf import DictConfig
 from loguru import logger
 
 from syft_core import Client as SyftBoxClient
-from syft_rds.orchestra import setup_rds_server, remove_rds_stack_dir, SingleRDSStack
-from syft_rds.client.rds_client import RDSClient
+from syft_rds.client.rds_client import RDSClient, init_session
 
 from safer_bench.dataset_utils import get_dataset_path, validate_dataset_exists
 from safer_bench.models import (
@@ -48,6 +49,9 @@ class FederationManager:
         self.network_key = SAFER_BENCH_SYFTBOX_NETWORK
         # Use project root directory (safer-bench/) regardless of where script is run from
         self.root_dir = Path(__file__).parents[2]
+        self.syftbox_network_dir = (
+            self.root_dir / "local_syftbox_network" / self.network_key
+        )
 
         # Parse federation configuration
         self.aggregator_email: str = cfg.federation.aggregator
@@ -56,11 +60,7 @@ class FederationManager:
         self.benchmark_id: Optional[str] = None  # Set by BenchmarkRunner
 
         # Runtime state tracked separately
-        self.ds_stack: Optional[SingleRDSStack] = None
         self.ds_client: Optional[RDSClient] = None
-        self.do_stacks: Dict[
-            str, SingleRDSStack
-        ] = {}  # { client_email: SingleRDSStack }
         self.do_clients: Dict[str, RDSClient] = {}  # { client_email: RDSClient }
         self.is_setup = False
 
@@ -82,7 +82,7 @@ class FederationManager:
 
             # Setup Data Scientist (aggregator)
             logger.info(f"Setting up aggregator: {self.aggregator_email}")
-            self.ds_stack = await self._setup_aggregator()
+            self.ds_client = await self._setup_aggregator()
 
             # Setup Data Owners
             logger.info(f"Setting up {len(self.data_owners)} data owners")
@@ -122,25 +122,33 @@ class FederationManager:
         logger.debug("🧹 Cleaning up federation resources")
 
         try:
-            # Clean up RDS stacks (safe to call even if none exist)
-            try:
-                remove_rds_stack_dir(root_dir=self.root_dir, key=self.network_key)
-                logger.debug("Cleaned up SyftBox directories")
-            except Exception as e:
-                logger.debug(f"No SyftBox directories to clean: {e}")
+            # Stop all RDS servers before cleanup to release file handles
+            if self.ds_client:
+                try:
+                    self.ds_client.stop_server()
+                    logger.debug("Stopped DS RDS server")
+                except Exception as e:
+                    logger.debug(f"Failed to stop DS server: {e}")
+
+            for email, client in self.do_clients.items():
+                try:
+                    client.stop_server()
+                    logger.debug(f"Stopped DO's SyftEvent server for {email}")
+                except Exception as e:
+                    logger.debug(f"Failed to stop DO's SyftEvent server {email}: {e}")
+
+            # Clean up federation network directory
+            self._cleanup_directory(
+                directory=self.syftbox_network_dir, description=self.network_key
+            )
 
             # Clean up .syftbox directory
-            syftbox_dir = self.root_dir / ".syftbox"
-            if syftbox_dir.exists():
-                import shutil
-
-                shutil.rmtree(syftbox_dir, ignore_errors=True)
-                logger.debug("Cleaned up .syftbox directory")
+            self._cleanup_directory(
+                directory=self.root_dir / ".syftbox", description=".syftbox"
+            )
 
             # Reset runtime state
-            self.ds_stack = None
             self.ds_client = None
-            self.do_stacks.clear()
             self.do_clients.clear()
             self.is_setup = False
 
@@ -148,6 +156,39 @@ class FederationManager:
 
         except Exception as e:
             logger.warning(f"Error during cleanup: {e}")
+
+    def _cleanup_directory(self, directory: Path, description: str) -> None:
+        """Helper method to clean up a directory with retries.
+
+        Args:
+            directory: Path to directory to remove
+            description: Human-readable description for logging
+        """
+        if not directory.exists():
+            logger.debug(f"Directory {description} doesn't exist, skipping")
+            return
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                shutil.rmtree(directory, ignore_errors=False)
+                logger.debug(f"✅ Cleaned up {description} directory: {directory}")
+                return
+            except OSError as e:
+                if attempt < max_retries - 1:
+                    logger.debug(
+                        f"Retry {attempt + 1}/{max_retries} for {description}: {e}"
+                    )
+                    time.sleep(0.5)  # Wait before retry
+                else:
+                    # Last attempt: try with ignore_errors=True
+                    logger.warning(
+                        f"Failed to cleanup {description} after {max_retries} attempts: {e}"
+                    )
+                    try:
+                        shutil.rmtree(directory, ignore_errors=True)
+                    except Exception:
+                        pass  # Silently ignore final errors
 
     async def get_guest_clients(self) -> List[SyftBoxClient]:
         """Get guest client connections from DS to all DOs.
@@ -160,7 +201,14 @@ class FederationManager:
 
         guest_clients = []
         for do_info in self.data_owners:
-            guest_client = self.ds_stack.init_session(host=do_info.email)
+            # Create guest connection from DS to DO's datasite
+            guest_client = init_session(
+                host=do_info.email,
+                email=self.aggregator_email,
+                syftbox_dir=self.syftbox_network_dir,
+                reset=False,
+                start_syft_event_server=False,  # Don't start server for guest connections
+            )
             guest_clients.append(guest_client)
 
         return guest_clients
@@ -242,7 +290,13 @@ class FederationManager:
         for do_info in self.data_owners:
             try:
                 # Get DO client (as guest from DS perspective)
-                guest_client = self.ds_stack.init_session(host=do_info.email)
+                guest_client = init_session(
+                    host=do_info.email,
+                    email=self.aggregator_email,
+                    syftbox_dir=self.syftbox_network_dir,
+                    reset=False,
+                    start_syft_event_server=False,
+                )
 
                 logger.info(
                     f"Submitting job to {do_info.email} for dataset {do_info.dataset}"
@@ -485,9 +539,9 @@ class FederationManager:
                 f"Starting DO client: {job_info.do_email} in a separate process..."
             )
 
-            # Get DO's config path from stack
-            do_stack = self.do_stacks[job_info.do_email]
-            config_path = str(do_stack.client.config_path)
+            # Get DO's config path from client
+            do_client = self.do_clients[job_info.do_email]
+            config_path = str(do_client.local_store.syftbox_client.config_path)
 
             # Run in process pool executor (each process gets its own environment)
             loop = asyncio.get_event_loop()
@@ -776,25 +830,29 @@ class FederationManager:
 
         return data_owners
 
-    async def _setup_aggregator(self) -> SingleRDSStack:
+    async def _setup_aggregator(self) -> RDSClient:
         """Setup the data scientist/aggregator node.
 
         Returns:
-            SingleRDSStack for the aggregator
+            RDSClient for the aggregator
         """
-        # Setup RDS server for aggregator
-        ds_stack = setup_rds_server(
-            email=self.aggregator_email, root_dir=self.root_dir, key=self.network_key
+        # Setup RDS client for aggregator using init_session
+        # This will automatically create the RDS server and initialize the session
+        ds_client = init_session(
+            host=self.aggregator_email,
+            email=self.aggregator_email,
+            syftbox_dir=self.syftbox_network_dir,
+            reset=False,
+            start_syft_event_server=True,
         )
 
-        # Initialize client session
-        self.ds_client = ds_stack.init_session(host=self.aggregator_email)
-
         # Set environment variable for SyftBox client config
-        os.environ["SYFTBOX_CLIENT_CONFIG_PATH"] = str(ds_stack.client.config_path)
+        os.environ["SYFTBOX_CLIENT_CONFIG_PATH"] = str(
+            ds_client.local_store.syftbox_client.config_path
+        )
 
         logger.debug(f"Aggregator setup complete: {self.aggregator_email}")
-        return ds_stack
+        return ds_client
 
     async def _setup_data_owners(self):
         """Setup all data owner nodes."""
@@ -815,16 +873,17 @@ class FederationManager:
         Args:
             do_info: DataOwnerInfo object for the data owner
         """
-        # Setup RDS server for DO
-        do_stack = setup_rds_server(
-            email=do_info.email, root_dir=self.root_dir, key=self.network_key
+        # Setup RDS client for DO using init_session
+        # This will automatically create the RDS server and initialize the session
+        do_client = init_session(
+            host=do_info.email,
+            email=do_info.email,
+            syftbox_dir=self.syftbox_network_dir,
+            reset=False,
+            start_syft_event_server=True,
         )
 
-        # Initialize client session
-        do_client = do_stack.init_session(host=do_info.email)
-
-        # Store stack and client in dictionaries
-        self.do_stacks[do_info.email] = do_stack
+        # Store client in dictionary
         self.do_clients[do_info.email] = do_client
 
         logger.debug(
@@ -839,7 +898,13 @@ class FederationManager:
         for do_info in self.data_owners:
             try:
                 # Try to connect from DS to DO as guest
-                guest_client = self.ds_stack.init_session(host=do_info.email)
+                guest_client = init_session(
+                    host=do_info.email,
+                    email=self.aggregator_email,
+                    syftbox_dir=self.syftbox_network_dir,
+                    reset=False,
+                    start_syft_event_server=False,
+                )
                 assert not guest_client.is_admin, f"Should be guest on {do_info.email}"
                 logger.debug(f"✅ DS can connect to {do_info.email} as guest")
             except Exception as e:
@@ -874,15 +939,14 @@ def _run_do_job_in_process(do_email: str, job_uid: str, config_path: str) -> Non
     # Set environment for this process
     os.environ["SYFTBOX_CLIENT_CONFIG_PATH"] = config_path
 
-    # Load SyftBox client from config
-    syftbox_client = SyftBoxClient.load(Path(config_path))
+    # Initialize session as admin on own datasite using the config
+    do_client = init_session(
+        host=do_email,
+        email=do_email,
+        syftbox_client_config_path=config_path,
+        start_syft_event_server=True,
+    )
 
-    # Create RDS stack with the loaded client
-    do_stack = SingleRDSStack(client=syftbox_client)
-
-    # Initialize session as admin on own datasite
-    do_client = do_stack.init_session(host=do_email)
-
-    # Get and run the job
+    # Get and run the job with explicit blocking=True
     job = do_client.job.get(job_uid)
-    do_client.run_private(job)
+    do_client.run_private(job, blocking=True)

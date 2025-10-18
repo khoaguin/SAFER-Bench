@@ -65,7 +65,8 @@ show-config:
 # Clean running artifacts and caches
 clean:
     @echo -e "{{_yellow}}🧹 Cleaning up...{{_nc}}"
-    rm -rf outputs/ multirun/ logs/ .pytest_cache/ .mypy_cache/ .ruff_cache/ safer_bench_network/
-    rm -rf .syftbox .server
+    rm -rf .pytest_cache/ .mypy_cache/ .ruff_cache/
+    rm -rf local_syftbox_network/ safer_bench_network/ outputs/ multirun/ logs/
     find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    find . -type d -name ".syftbox" -exec rm -rf {} + 2>/dev/null || true
     @echo -e "{{_green}}✅ Cleaned{{_nc}}"
