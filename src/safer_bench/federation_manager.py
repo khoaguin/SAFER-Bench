@@ -17,6 +17,7 @@ from loguru import logger
 
 from syft_core import Client as SyftBoxClient
 from syft_rds.client.rds_client import RDSClient, init_session
+from syft_rds.models import Job
 
 from safer_bench.dataset_utils import get_dataset_path, validate_dataset_exists
 from safer_bench.models import (
@@ -156,39 +157,6 @@ class FederationManager:
 
         except Exception as e:
             logger.warning(f"Error during cleanup: {e}")
-
-    def _cleanup_directory(self, directory: Path, description: str) -> None:
-        """Helper method to clean up a directory with retries.
-
-        Args:
-            directory: Path to directory to remove
-            description: Human-readable description for logging
-        """
-        if not directory.exists():
-            logger.debug(f"Directory {description} doesn't exist, skipping")
-            return
-
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                shutil.rmtree(directory, ignore_errors=False)
-                logger.debug(f"✅ Cleaned up {description} directory: {directory}")
-                return
-            except OSError as e:
-                if attempt < max_retries - 1:
-                    logger.debug(
-                        f"Retry {attempt + 1}/{max_retries} for {description}: {e}"
-                    )
-                    time.sleep(0.5)  # Wait before retry
-                else:
-                    # Last attempt: try with ignore_errors=True
-                    logger.warning(
-                        f"Failed to cleanup {description} after {max_retries} attempts: {e}"
-                    )
-                    try:
-                        shutil.rmtree(directory, ignore_errors=True)
-                    except Exception:
-                        pass  # Silently ignore final errors
 
     async def get_guest_clients(self) -> List[SyftBoxClient]:
         """Get guest client connections from DS to all DOs.
@@ -449,48 +417,171 @@ class FederationManager:
             f"🚀 Running FedRAG: DS aggregator server + {len(jobs_processing_results.approved_jobs)} DO clients"
         )
 
-        # Create process pool for DO jobs (one process per DO)
+        # Create process pool for both DS and DO jobs (DS + num_DOs)
         num_approved_jobs = len(jobs_processing_results.approved_jobs)
+        max_workers = num_approved_jobs + 1  # +1 for DS
+
         with concurrent.futures.ProcessPoolExecutor(
-            max_workers=num_approved_jobs
+            max_workers=max_workers
         ) as process_pool:
-            # Start DS server task (will run until completion)
+            # Start DO clients and DS server concurrently
+            do_task = asyncio.create_task(
+                self._run_dos(jobs_processing_results.approved_jobs, process_pool)
+            )
             ds_task = asyncio.create_task(
-                self._run_ds_aggregator_server(fedrag_project_path)
+                self._run_ds(fedrag_project_path, process_pool)
             )
 
-            # Start DO client tasks (will run in passive mode, listening for queries)
-            do_tasks = []
-            for job_info in jobs_processing_results.approved_jobs:
-                do_tasks.append(
-                    asyncio.create_task(self._run_single_do_job(job_info, process_pool))
-                )
-
             # Wait for DS server to complete
-            ds_result = await ds_task
+            job = await ds_task
 
-            # Cancel all DO tasks when DS completes (following syft_flwr pattern)
+            ds_logs: Dict = self.ds_client.job.get_logs(job)
+            self.ds_client.job.show_logs(job)
+
+            ds_result = {
+                "status": "success",
+                "stdout": ds_logs.get("stdout", ""),
+                "stderr": ds_logs.get("stderr", ""),
+                "logs_dir": ds_logs.get("logs_dir", ""),
+            }
+
+            # Cancel DO tasks when DS completes (following syft_flwr pattern)
             logger.debug("DS server completed, cancelling DO client tasks...")
-            for do_task in do_tasks:
-                if not do_task.done():
-                    do_task.cancel()
+            do_task.cancel()
 
             # Gather DO results (with exceptions handled)
-            do_results = await asyncio.gather(*do_tasks, return_exceptions=True)
+            try:
+                do_results = await do_task
+            except asyncio.CancelledError:
+                # DO tasks were cancelled - mark all as successful
+                do_results = jobs_processing_results.approved_jobs
+                logger.debug("DO tasks cancelled after DS completion")
+
+        # Process results and create return value
+        return self._build_execution_result(do_results, ds_result)
+
+    def _cleanup_directory(self, directory: Path, description: str) -> None:
+        """Helper method to clean up a directory with retries.
+
+        Args:
+            directory: Path to directory to remove
+            description: Human-readable description for logging
+        """
+        if not directory.exists():
+            logger.debug(f"Directory {description} doesn't exist, skipping")
+            return
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                shutil.rmtree(directory, ignore_errors=False)
+                logger.debug(f"✅ Cleaned up {description} directory: {directory}")
+                return
+            except OSError as e:
+                if attempt < max_retries - 1:
+                    logger.debug(
+                        f"Retry {attempt + 1}/{max_retries} for {description}: {e}"
+                    )
+                    time.sleep(0.5)  # Wait before retry
+                else:
+                    # Last attempt: try with ignore_errors=True
+                    logger.warning(
+                        f"Failed to cleanup {description} after {max_retries} attempts: {e}"
+                    )
+                    try:
+                        shutil.rmtree(directory, ignore_errors=True)
+                    except Exception:
+                        pass  # Silently ignore final errors
+
+    async def _run_ds(
+        self,
+        fedrag_project_path: Path,
+        process_pool: concurrent.futures.ProcessPoolExecutor,
+    ) -> Job:
+        """Run DS aggregator server using syft-rds job submission workflow in a separate process.
+
+        Args:
+            fedrag_project_path: Path to the FedRAG project
+            process_pool: ProcessPoolExecutor for running DS job in separate process
+
+        Returns:
+            Job object representing the DS job
+        """
+        try:
+            logger.debug("Starting DS aggregator server via syft-rds job workflow...")
+
+            # DS submits job to themselves (no dataset_name needed for aggregator)
+            job = self.ds_client.job.submit(
+                name=f"fedrag_aggregator_{self.benchmark_id}",
+                user_code_path=fedrag_project_path,
+                entrypoint="main.py",
+            )
+            logger.debug(f"DS job submitted: {job.uid}")
+
+            # DS approves their own job
+            self.ds_client.job.approve(job)
+            logger.debug(f"DS job approved: {job.uid}")
+
+            # Run the job in blocking mode in a separate process
+            logger.debug("Running DS aggregator job in separate process...")
+
+            # Get DS config path
+            ds_config_path = str(self.ds_client.local_store.syftbox_client.config_path)
+
+            # Run DS job in process pool to avoid blocking the async event loop
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                process_pool,
+                _run_ds_job_in_process,
+                self.aggregator_email,
+                str(job.uid),
+                ds_config_path,
+            )
+
+            return job
+
+        except Exception as e:
+            raise Exception(f"❌ Failed to run DS aggregator server: {e}. Abort!")
+
+    async def _run_dos(
+        self,
+        approved_jobs: List[JobInfo],
+        process_pool: concurrent.futures.ProcessPoolExecutor,
+    ) -> List[JobInfo]:
+        """Run all DO client jobs in parallel.
+
+        Args:
+            approved_jobs: List of approved JobInfo objects
+            process_pool: ProcessPoolExecutor for running jobs in separate processes
+
+        Returns:
+            List of updated JobInfo objects with execution results
+        """
+        logger.info(f"🚀 Launching {len(approved_jobs)} DO clients...")
+
+        # Start DO client tasks (will run in passive mode, listening for queries)
+        do_tasks = []
+        for job_info in approved_jobs:
+            do_tasks.append(
+                asyncio.create_task(self._run_single_do_job(job_info, process_pool))
+            )
+
+        # Gather DO results (with exceptions handled)
+        do_results = await asyncio.gather(*do_tasks, return_exceptions=True)
 
         # Process DO results
         updated_jobs = []
         for idx, result in enumerate(do_results):
             if isinstance(result, asyncio.CancelledError):
                 # DO was cancelled after DS completed - this is expected
-                job_info = jobs_processing_results.approved_jobs[idx]
+                job_info = approved_jobs[idx]
                 job_info.status = JobProcessingStatus.approved
                 updated_jobs.append(job_info)
                 logger.debug(
                     f"DO client {job_info.do_email} cancelled after DS completion"
                 )
             elif isinstance(result, Exception):
-                job_info = jobs_processing_results.approved_jobs[idx]
+                job_info = approved_jobs[idx]
                 job_info.status = JobProcessingStatus.processing_failed
                 job_info.error = str(result)
                 updated_jobs.append(job_info)
@@ -500,9 +591,26 @@ class FederationManager:
         successful_count = len(
             [j for j in updated_jobs if j.status == JobProcessingStatus.approved]
         )
-        failed_count = len(updated_jobs) - successful_count
-        logger.success(f"✅ Completed {successful_count}/{len(updated_jobs)} DO jobs")
+        logger.success(
+            f"✅ {successful_count}/{len(updated_jobs)} DO clients listening for queries"
+        )
 
+        return updated_jobs
+
+    def _build_execution_result(
+        self,
+        do_results: List[JobInfo],
+        ds_result: Dict[str, Any],
+    ) -> FedRAGExecutionResult:
+        """Build FedRAGExecutionResult from execution results.
+
+        Args:
+            do_results: List of JobInfo with execution results from DOs
+            ds_result: Dictionary with DS server execution results
+
+        Returns:
+            FedRAGExecutionResult with complete execution metrics
+        """
         # Convert ds_result dict to DSServerResult model
         if isinstance(ds_result, Exception):
             ds_server_result = DSServerResult(
@@ -512,14 +620,20 @@ class FederationManager:
         else:
             ds_server_result = DSServerResult(**ds_result)
 
+        # Calculate success metrics
+        successful_count = len(
+            [j for j in do_results if j.status == JobProcessingStatus.approved]
+        )
+        failed_count = len(do_results) - successful_count
+
         # Create and return FedRAGExecutionResult
         return FedRAGExecutionResult(
-            total_jobs=len(updated_jobs),
+            total_jobs=len(do_results),
             successful_jobs=successful_count,
             failed_jobs=failed_count,
-            job_results=updated_jobs,
+            job_results=do_results,
             ds_server_result=ds_server_result,
-            success_rate=successful_count / len(updated_jobs) if updated_jobs else 0.0,
+            success_rate=successful_count / len(do_results) if do_results else 0.0,
         )
 
     async def _run_single_do_job(
@@ -555,7 +669,7 @@ class FederationManager:
 
             # Update job info
             job_info.status = JobProcessingStatus.approved
-            logger.debug(f"DO client completed: {job_info.do_email}")
+            logger.debug(f"DO client listening: {job_info.do_email}")
             return job_info
 
         except asyncio.CancelledError:
@@ -567,126 +681,6 @@ class FederationManager:
             job_info.status = JobProcessingStatus.processing_failed
             job_info.error = str(e)
             return job_info
-
-    def _log_ds_server_output(
-        self, stdout: str, stderr: str, success: bool = True
-    ) -> None:
-        """Log DS server stdout/stderr output.
-
-        Args:
-            stdout: Server stdout output
-            stderr: Server stderr output
-            success: Whether server execution was successful
-        """
-        if success:
-            # Log stdout results at info level (contains FedRAG metrics)
-            if stdout.strip():
-                logger.info("📊 DS Server Results:")
-                for line in stdout.strip().split("\n"):
-                    if line.strip():
-                        logger.info(f"   {line}")
-
-            # Log stderr at debug level if present
-            if stderr.strip():
-                logger.debug("DS server stderr:")
-                for line in stderr.strip().split("\n"):
-                    if line.strip():
-                        logger.debug(f"   {line}")
-        else:
-            # On failure, log stderr at error level for diagnostics
-            if stderr.strip():
-                logger.error("DS server stderr:")
-                for line in stderr.strip().split("\n"):
-                    if line.strip():
-                        logger.error(f"   {line}")
-
-            # Log stdout at debug level (may contain partial results)
-            if stdout.strip():
-                logger.debug("DS server stdout:")
-                for line in stdout.strip().split("\n"):
-                    if line.strip():
-                        logger.debug(f"   {line}")
-
-    async def _run_ds_aggregator_server(
-        self, fedrag_project_path: Path
-    ) -> Dict[str, Any]:
-        """Run DS aggregator FL server.
-
-        Args:
-            fedrag_project_path: Path to the FedRAG project
-
-        Returns:
-            Dictionary with server execution results
-        """
-        try:
-            logger.debug("Starting DS's FL aggregator server in a subprocess...")
-
-            main_py_path = fedrag_project_path / "main.py"
-            if not main_py_path.exists():
-                raise FileNotFoundError(f"main.py not found at {main_py_path}")
-
-            process = await asyncio.create_subprocess_exec(
-                "uv",
-                "run",
-                str(main_py_path),
-                "--active",  # Use python directly from the parent project's venv
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=fedrag_project_path,
-            )
-
-            # Stream output in real-time while collecting it
-            stdout_lines: List[str] = []
-            stderr_lines: List[str] = []
-
-            async def read_stream(
-                stream: asyncio.StreamReader, lines_list: List[str], prefix: str = ""
-            ) -> None:
-                while True:
-                    line = await stream.readline()
-                    if not line:
-                        break
-                    line_str = line.decode().rstrip()
-                    lines_list.append(line_str)
-                    # Print to console in real-time
-                    if line_str:
-                        print(f"{prefix}{line_str}")
-
-            # Read both streams concurrently
-            await asyncio.gather(
-                read_stream(process.stdout, stdout_lines),
-                read_stream(process.stderr, stderr_lines),
-            )
-
-            # Wait for process to finish
-            await process.wait()
-
-            stdout_str = "\n".join(stdout_lines)
-            stderr_str = "\n".join(stderr_lines)
-
-            if process.returncode == 0:
-                logger.success("✅ DS aggregator server completed successfully")
-
-                return {
-                    "status": "success",
-                    "stdout": stdout_str,
-                    "stderr": stderr_str,
-                }
-            else:
-                logger.error(
-                    f"❌ DS aggregator server failed with code {process.returncode}"
-                )
-
-                return {
-                    "status": "failed",
-                    "returncode": process.returncode,
-                    "stdout": stdout_str,
-                    "stderr": stderr_str,
-                }
-
-        except Exception as e:
-            logger.error(f"❌ Failed to run DS aggregator server: {e}")
-            return {"status": "error", "error": str(e)}
 
     async def _upload_single_dataset(self, do_info: DataOwnerInfo) -> DatasetUploadInfo:
         """Upload dataset for a single data owner.
@@ -919,6 +913,41 @@ class FederationManager:
             logger.debug(f"✅ {do_info.email} is admin on their datasite")
 
 
+def _run_ds_job_in_process(ds_email: str, job_uid: str, config_path: str) -> None:
+    """Run DS job in a separate process.
+
+    This function must be at module level to be picklable by ProcessPoolExecutor.
+    Each process gets its own environment and reconstructs the DS client.
+
+    Args:
+        ds_email: Data scientist email
+        job_uid: Job UID to execute
+        config_path: Path to SyftBox client config file
+    """
+    # Disable verbose syft library logs in this process
+    logger.disable("syft_event")
+    logger.disable("syft_rds")
+    logger.disable("syft_crypto")
+    logger.disable("syft_flwr")
+
+    # Set environment for this process
+    os.environ["SYFTBOX_CLIENT_CONFIG_PATH"] = config_path
+
+    # Initialize session as admin on own datasite using the config
+    ds_client = init_session(
+        host=ds_email,
+        email=ds_email,
+        syftbox_client_config_path=config_path,
+        start_syft_event_server=True,
+    )
+
+    # Get the job
+    job = ds_client.job.get(job_uid)
+
+    # Run the job in blocking=True mode with --active and --verbose flags
+    ds_client.run_private(job, blocking=True, args=["--active", "--verbose"])
+
+
 def _run_do_job_in_process(do_email: str, job_uid: str, config_path: str) -> None:
     """Run DO job in a separate process.
 
@@ -947,6 +976,11 @@ def _run_do_job_in_process(do_email: str, job_uid: str, config_path: str) -> Non
         start_syft_event_server=True,
     )
 
-    # Get and run the job with explicit blocking=True
+    # Get the job
     job = do_client.job.get(job_uid)
-    do_client.run_private(job, blocking=True)
+
+    # Approve the job (DO approves their own job)
+    do_client.job.approve(job)
+
+    # Run the job in blocking=False mode (passive - listens for DS queries)
+    do_client.run_private(job, blocking=False)
