@@ -6,6 +6,7 @@ Handles SyftBox network initialization and data owner registration.
 import os
 import asyncio
 import random
+import hashlib
 import concurrent.futures
 from pathlib import Path
 from typing_extensions import Dict, List, Any, Optional
@@ -34,7 +35,25 @@ from safer_bench.models import (
 )
 
 
+LOCAL_SYFTBOX_NETWORK = "local_syftbox_network"
 SAFER_BENCH_SYFTBOX_NETWORK = "safer_bench_network"
+
+
+class FederationConfig:
+    """Configuration constants for federation management."""
+
+    # Timeouts
+    DEFAULT_JOB_READY_TIMEOUT = 60  # seconds
+    DATASET_UPLOAD_TIMEOUT = 60  # seconds
+    ASYNC_GATHER_TIMEOUT = 600  # seconds for general async.gather operations
+    PROCESS_CANCEL_TIMEOUT = 5.0  # seconds
+
+    # Intervals
+    JOB_READY_CHECK_INTERVAL = 2  # seconds
+
+    # Retries
+    DIRECTORY_CLEANUP_MAX_RETRIES = 3
+    DIRECTORY_CLEANUP_RETRY_DELAY = 0.5  # seconds
 
 
 class FederationManager:
@@ -51,7 +70,7 @@ class FederationManager:
         # Use project root directory (safer-bench/) regardless of where script is run from
         self.root_dir = Path(__file__).parents[2]
         self.syftbox_network_dir = (
-            self.root_dir / "local_syftbox_network" / self.network_key
+            self.root_dir / LOCAL_SYFTBOX_NETWORK / self.network_key
         )
 
         # Parse federation configuration
@@ -63,7 +82,11 @@ class FederationManager:
         # Runtime state tracked separately
         self.ds_client: Optional[RDSClient] = None
         self.do_clients: Dict[str, RDSClient] = {}  # { client_email: RDSClient }
+        self._guest_clients: List[RDSClient] = []  # Track guest clients for cleanup
         self.is_setup = False
+
+        # Lock for protecting shared state access
+        self._state_lock = asyncio.Lock()
 
     # Public Methods
     async def setup_federation(self) -> FederationInfo:
@@ -110,11 +133,11 @@ class FederationManager:
             return federation_info
 
         except Exception as e:
-            logger.error(f"Failed to setup federation: {e}")
+            logger.exception(f"Failed to setup federation: {e}")
             await self.cleanup()
-            raise
+            raise RuntimeError(f"Federation setup failed: {e}") from e
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """Clean up federation resources and reset state.
 
         Safe to call multiple times - will clean up any existing resources
@@ -131,12 +154,24 @@ class FederationManager:
                 except Exception as e:
                     logger.debug(f"Failed to stop DS server: {e}")
 
-            for email, client in self.do_clients.items():
-                try:
-                    client.stop_server()
-                    logger.debug(f"Stopped DO's SyftEvent server for {email}")
-                except Exception as e:
-                    logger.debug(f"Failed to stop DO's SyftEvent server {email}: {e}")
+            # Protect access to shared state with lock
+            async with self._state_lock:
+                for email, client in self.do_clients.items():
+                    try:
+                        client.stop_server()
+                        logger.debug(f"Stopped DO's SyftEvent server for {email}")
+                    except Exception as e:
+                        logger.debug(
+                            f"Failed to stop DO's SyftEvent server {email}: {e}"
+                        )
+
+                # Clean up guest clients
+                for guest_client in self._guest_clients:
+                    try:
+                        guest_client.stop_server()
+                        logger.debug("Stopped guest client server")
+                    except Exception as e:
+                        logger.debug(f"Failed to stop guest client server: {e}")
 
             # Clean up federation network directory
             self._cleanup_directory(
@@ -145,13 +180,16 @@ class FederationManager:
 
             # Clean up .syftbox directory
             self._cleanup_directory(
-                directory=self.root_dir / ".syftbox", description=".syftbox"
+                directory=self.root_dir / LOCAL_SYFTBOX_NETWORK / ".syftbox",
+                description=".syftbox",
             )
 
-            # Reset runtime state
-            self.ds_client = None
-            self.do_clients.clear()
-            self.is_setup = False
+            # Reset runtime state - protect with lock
+            async with self._state_lock:
+                self.ds_client = None
+                self.do_clients.clear()
+                self._guest_clients.clear()
+                self.is_setup = False
 
             logger.debug("Federation cleanup complete")
 
@@ -179,9 +217,13 @@ class FederationManager:
             )
             guest_clients.append(guest_client)
 
+            # Track for cleanup
+            async with self._state_lock:
+                self._guest_clients.append(guest_client)
+
         return guest_clients
 
-    async def wait_for_jobs(self, timeout: int = 60):
+    async def wait_for_jobs(self, timeout: int = 60) -> None:
         """Wait for all data owners to be ready to receive jobs.
 
         Args:
@@ -195,8 +237,9 @@ class FederationManager:
 
             for do_info in self.data_owners:
                 try:
-                    # Check if DO is responsive
-                    do_client = self.do_clients[do_info.email]
+                    # Check if DO is responsive - protect with lock
+                    async with self._state_lock:
+                        do_client = self.do_clients[do_info.email]
                     do_client.dataset.get_all()
                     logger.debug(f"✅ {do_info.email} is ready")
                 except Exception:
@@ -231,8 +274,19 @@ class FederationManager:
             task = self._upload_single_dataset(do_info)
             tasks.append(task)
 
-        # Execute all uploads concurrently
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Execute all uploads concurrently with timeout
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=FederationConfig.DATASET_UPLOAD_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Dataset upload timed out after {FederationConfig.DATASET_UPLOAD_TIMEOUT}s"
+            )
+            raise TimeoutError(
+                f"Dataset uploads failed to complete within {FederationConfig.DATASET_UPLOAD_TIMEOUT}s"
+            )
 
         # Process and categorize results
         return self._process_upload_results(results)
@@ -265,6 +319,10 @@ class FederationManager:
                     reset=False,
                     start_syft_event_server=False,
                 )
+
+                # Track guest client for cleanup
+                async with self._state_lock:
+                    self._guest_clients.append(guest_client)
 
                 logger.info(
                     f"Submitting job to {do_info.email} for dataset {do_info.dataset}"
@@ -340,11 +398,14 @@ class FederationManager:
         # Deterministic but fair approval using seeded shuffle
         # Use benchmark_id as seed for reproducibility
         if jobs_info and jobs_info[0].benchmark_id:
-            # Convert benchmark_id to integer seed for reproducibility
-            seed = hash(jobs_info[0].benchmark_id) % (2**32)
+            # Convert benchmark_id to integer seed using deterministic hashlib
+            # (hash() is non-deterministic across Python sessions)
+            benchmark_id_bytes = jobs_info[0].benchmark_id.encode("utf-8")
+            hash_digest = hashlib.sha256(benchmark_id_bytes).hexdigest()
+            seed = int(hash_digest[:8], 16)  # Use first 8 hex chars as seed
             random.seed(seed)
             logger.debug(
-                f"Using seed {seed} (from benchmark_id) for job approval shuffle"
+                f"Using deterministic seed {seed} (from benchmark_id) for job approval shuffle"
             )
 
         # Shuffle jobs to ensure fair distribution across DOs
@@ -413,6 +474,12 @@ class FederationManager:
         if not self.is_setup:
             raise RuntimeError("Federation not setup. Call setup() first.")
 
+        # Validate approved jobs list is non-empty
+        if not jobs_processing_results.approved_jobs:
+            raise ValueError(
+                "No approved jobs to run. Cannot execute FedRAG with empty job list."
+            )
+
         logger.info(
             f"🚀 Running FedRAG: DS aggregator server + {len(jobs_processing_results.approved_jobs)} DO clients"
         )
@@ -421,9 +488,10 @@ class FederationManager:
         num_approved_jobs = len(jobs_processing_results.approved_jobs)
         max_workers = num_approved_jobs + 1  # +1 for DS
 
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=max_workers
-        ) as process_pool:
+        # Create process pool with explicit lifecycle management
+        process_pool = concurrent.futures.ProcessPoolExecutor(max_workers=max_workers)
+
+        try:
             # Start DO clients and DS server concurrently
             do_task = asyncio.create_task(
                 self._run_dos(jobs_processing_results.approved_jobs, process_pool)
@@ -457,8 +525,14 @@ class FederationManager:
                 do_results = jobs_processing_results.approved_jobs
                 logger.debug("DO tasks cancelled after DS completion")
 
-        # Process results and create return value
-        return self._build_execution_result(do_results, ds_result)
+            # Process results and create return value
+            return self._build_execution_result(do_results, ds_result)
+
+        finally:
+            # Explicitly shutdown process pool to prevent zombie processes
+            logger.debug("Shutting down process pool...")
+            process_pool.shutdown(wait=True, cancel_futures=False)
+            logger.debug("Process pool shutdown complete")
 
     def _cleanup_directory(self, directory: Path, description: str) -> None:
         """Helper method to clean up a directory with retries.
@@ -471,7 +545,7 @@ class FederationManager:
             logger.debug(f"Directory {description} doesn't exist, skipping")
             return
 
-        max_retries = 3
+        max_retries = FederationConfig.DIRECTORY_CLEANUP_MAX_RETRIES
         for attempt in range(max_retries):
             try:
                 shutil.rmtree(directory, ignore_errors=False)
@@ -482,7 +556,7 @@ class FederationManager:
                     logger.debug(
                         f"Retry {attempt + 1}/{max_retries} for {description}: {e}"
                     )
-                    time.sleep(0.5)  # Wait before retry
+                    time.sleep(FederationConfig.DIRECTORY_CLEANUP_RETRY_DELAY)
                 else:
                     # Last attempt: try with ignore_errors=True
                     logger.warning(
@@ -490,8 +564,10 @@ class FederationManager:
                     )
                     try:
                         shutil.rmtree(directory, ignore_errors=True)
-                    except Exception:
-                        pass  # Silently ignore final errors
+                    except Exception as cleanup_error:
+                        logger.debug(
+                            f"Final cleanup attempt failed for {description}: {cleanup_error}"
+                        )
 
     async def _run_ds(
         self,
@@ -541,7 +617,8 @@ class FederationManager:
             return job
 
         except Exception as e:
-            raise Exception(f"❌ Failed to run DS aggregator server: {e}. Abort!")
+            logger.exception(f"Failed to run DS aggregator server: {e}")
+            raise RuntimeError(f"DS aggregator server execution failed: {e}") from e
 
     async def _run_dos(
         self,
@@ -566,8 +643,26 @@ class FederationManager:
                 asyncio.create_task(self._run_single_do_job(job_info, process_pool))
             )
 
-        # Gather DO results (with exceptions handled)
-        do_results = await asyncio.gather(*do_tasks, return_exceptions=True)
+        # Gather DO results (with exceptions handled) with timeout
+        try:
+            do_results = await asyncio.wait_for(
+                asyncio.gather(*do_tasks, return_exceptions=True),
+                timeout=FederationConfig.ASYNC_GATHER_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"DO client tasks timed out after {FederationConfig.ASYNC_GATHER_TIMEOUT}s"
+            )
+            # Cancel all tasks on timeout
+            for task in do_tasks:
+                task.cancel()
+            # Return approved jobs with timeout status
+            do_results = [
+                asyncio.TimeoutError(
+                    f"DO job timed out after {FederationConfig.ASYNC_GATHER_TIMEOUT}s"
+                )
+                for _ in approved_jobs
+            ]
 
         # Process DO results
         updated_jobs = []
@@ -653,8 +748,9 @@ class FederationManager:
                 f"Starting DO client: {job_info.do_email} in a separate process..."
             )
 
-            # Get DO's config path from client
-            do_client = self.do_clients[job_info.do_email]
+            # Get DO's config path from client - protect with lock
+            async with self._state_lock:
+                do_client = self.do_clients[job_info.do_email]
             config_path = str(do_client.local_store.syftbox_client.config_path)
 
             # Run in process pool executor (each process gets its own environment)
@@ -708,8 +804,9 @@ class FederationManager:
             )
             dataset_name = do_info.dataset
 
-            # Get DO client
-            do_client = self.do_clients[do_info.email]
+            # Get DO client - protect with lock
+            async with self._state_lock:
+                do_client = self.do_clients[do_info.email]
 
             # Create Syft dataset
             logger.debug(f"Creating Syft dataset '{dataset_name}' for {do_info.email}")
@@ -848,7 +945,7 @@ class FederationManager:
         logger.debug(f"Aggregator setup complete: {self.aggregator_email}")
         return ds_client
 
-    async def _setup_data_owners(self):
+    async def _setup_data_owners(self) -> None:
         """Setup all data owner nodes."""
         tasks = []
 
@@ -856,12 +953,23 @@ class FederationManager:
             task = self._setup_single_do(do_info)
             tasks.append(task)
 
-        # Setup all DOs in parallel
-        await asyncio.gather(*tasks)
+        # Setup all DOs in parallel with timeout
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*tasks),
+                timeout=FederationConfig.ASYNC_GATHER_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Data owner setup timed out after {FederationConfig.ASYNC_GATHER_TIMEOUT}s"
+            )
+            raise TimeoutError(
+                f"Data owner setup failed to complete within {FederationConfig.ASYNC_GATHER_TIMEOUT}s"
+            )
 
         logger.debug(f"All {len(self.data_owners)} data owners setup complete")
 
-    async def _setup_single_do(self, do_info: DataOwnerInfo):
+    async def _setup_single_do(self, do_info: DataOwnerInfo) -> None:
         """Setup a single data owner node.
 
         Args:
@@ -877,14 +985,15 @@ class FederationManager:
             start_syft_event_server=True,
         )
 
-        # Store client in dictionary
-        self.do_clients[do_info.email] = do_client
+        # Store client in dictionary - protect with lock
+        async with self._state_lock:
+            self.do_clients[do_info.email] = do_client
 
         logger.debug(
             f"Data owner setup complete: {do_info.email} with dataset {do_info.dataset}"
         )
 
-    async def _verify_federation(self):
+    async def _verify_federation(self) -> None:
         """Verify that all nodes can communicate."""
         logger.debug("Verifying federation connectivity")
 
@@ -899,6 +1008,11 @@ class FederationManager:
                     reset=False,
                     start_syft_event_server=False,
                 )
+
+                # Track guest client for cleanup
+                async with self._state_lock:
+                    self._guest_clients.append(guest_client)
+
                 assert not guest_client.is_admin, f"Should be guest on {do_info.email}"
                 logger.debug(f"✅ DS can connect to {do_info.email} as guest")
             except Exception as e:
@@ -906,7 +1020,9 @@ class FederationManager:
 
         # Each DO should be admin on their own datasite
         for do_info in self.data_owners:
-            do_client = self.do_clients[do_info.email]
+            # Protect access with lock
+            async with self._state_lock:
+                do_client = self.do_clients[do_info.email]
             assert (
                 do_client.is_admin
             ), f"{do_info.email} should be admin on their datasite"
@@ -933,6 +1049,9 @@ def _run_ds_job_in_process(ds_email: str, job_uid: str, config_path: str) -> Non
     # Set environment for this process
     os.environ["SYFTBOX_CLIENT_CONFIG_PATH"] = config_path
 
+    # Set HuggingFace cache to use shared location (avoid re-downloading models)
+    os.environ["HF_HOME"] = str(Path.home() / ".cache" / "huggingface")
+
     # Initialize session as admin on own datasite using the config
     ds_client = init_session(
         host=ds_email,
@@ -943,9 +1062,14 @@ def _run_ds_job_in_process(ds_email: str, job_uid: str, config_path: str) -> Non
 
     # Get the job
     job = ds_client.job.get(job_uid)
+    if job is None:
+        raise ValueError(f"Job with UID {job_uid} not found for {ds_email}")
 
-    # Run the job in blocking=True mode with --active and --verbose flags
-    ds_client.run_private(job, blocking=True, args=["--active", "--verbose"])
+    # Run the job in blocking=True mode with --active and --no-sync flags
+    # --no-sync skips dependency synchronization to avoid reinstalling packages
+    ds_client.run_private(
+        job, blocking=True, uv_args=["--active", "--no-sync", "--quiet"]
+    )
 
 
 def _run_do_job_in_process(do_email: str, job_uid: str, config_path: str) -> None:
@@ -961,12 +1085,15 @@ def _run_do_job_in_process(do_email: str, job_uid: str, config_path: str) -> Non
     """
     # Disable verbose syft library logs in this process
     logger.disable("syft_event")
-    logger.disable("syft_rds")
+    # logger.disable("syft_rds")
     logger.disable("syft_crypto")
     logger.disable("syft_flwr")
 
     # Set environment for this process
     os.environ["SYFTBOX_CLIENT_CONFIG_PATH"] = config_path
+
+    # Set HuggingFace cache to use shared location (avoid re-downloading models)
+    os.environ["HF_HOME"] = str(Path.home() / ".cache" / "huggingface")
 
     # Initialize session as admin on own datasite using the config
     do_client = init_session(
@@ -978,9 +1105,14 @@ def _run_do_job_in_process(do_email: str, job_uid: str, config_path: str) -> Non
 
     # Get the job
     job = do_client.job.get(job_uid)
+    if job is None:
+        raise ValueError(f"Job with uid {job_uid} not found for {do_email}")
 
     # Approve the job (DO approves their own job)
     do_client.job.approve(job)
 
     # Run the job in blocking=False mode (passive - listens for DS queries)
-    do_client.run_private(job, blocking=False)
+    # --no-sync skips dependency synchronization to avoid reinstalling packages
+    do_client.run_private(
+        job, blocking=False, uv_args=["--active", "--no-sync", "--quiet"]
+    )
