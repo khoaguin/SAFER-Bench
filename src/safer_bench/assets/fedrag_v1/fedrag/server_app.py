@@ -104,7 +104,7 @@ def submit_question(
 
     # Send messages and wait for all results
     replies = grid.send_and_receive(messages)
-    print("Received {}/{} results".format(len(replies), len(messages)))
+    print(f"✓ Received {len(replies)}/{len(messages)} results")
 
     documents, scores = [], []
     for reply in replies:
@@ -163,7 +163,9 @@ def main(grid: Grid, context: Context) -> None:
     )  # [dataset][expected][predicted] = count
     for dataset_name in qa_datasets:
         q_idx = 0
-        print("Evaluating Dataset: [{:s}] ".format(dataset_name))
+        print(f"\n{'='*60}")
+        print(f"📊 Evaluating Dataset: [{dataset_name}]")
+        print(f"{'='*60}")
         for q in datasets[dataset_name]:
             q_idx += 1
             q_id = f"{dataset_name}_{q_idx}"
@@ -201,14 +203,17 @@ def main(grid: Grid, context: Context) -> None:
             else:
                 unanswered_questions[dataset_name] += 1
 
+    print("\n" + "=" * 80)
+    print("📈 FEDERATED RAG EVALUATION RESULTS")
+    print("=" * 80)
+    print("\nMetrics Explained:")
+    print("  (1) Total Questions - Number of Federated RAG queries executed")
+    print("  (2) Answered Questions - Queries answered by LLM with retrieved documents")
+    print("  (3) Accuracy - Expected answer vs. LLM predicted answer")
     print(
-        "Below, for each benchmark dataset (QA Dataset), we show: \n"
-        "(1) the evaluation results in terms of the total number of Federated RAG queries executed (Total Questions). \n"
-        "(2) the total number of queries answered by the LLM when prompted with the retrieved documents from the federation clients (Answered Questions). \n"
-        "(3) the overall performance of the Federated RAG pipeline (Accuracy), i.e., expected answer vs. predicted answer by the LLM. \n"
-        "(4) the mean wall-clock time (Mean Querying Time) for executing all Federated RAG queries; from the time the server submits the query to "
-        "the clients to the time the server receives the final prediction result from the LLM model when prompted with the retrieved documents.\n"
+        "  (4) Mean Querying Time - Average wall-clock time per query (submission → final prediction)"
     )
+    print("=" * 80 + "\n")
     for dataset_name in qa_datasets:
         exp_ans = expected_answers[dataset_name]
         pred_ans = predicted_answers[dataset_name]
@@ -218,20 +223,23 @@ def main(grid: Grid, context: Context) -> None:
         if exp_ans and pred_ans:  # make sure that both collections have values inside
             accuracy = accuracy_score(exp_ans, pred_ans)
         elapsed_time = np.mean(question_times[dataset_name])
-        print(
-            f"QA Dataset: {dataset_name} \n"
-            f"Total Questions: {total_questions} \n"
-            f"Answered Questions: {len(pred_ans)} \n"
-            f"Accuracy: {accuracy} \n"
-            f"Mean Querying Time: {elapsed_time} \n"
-        )
+
+        # Print dataset results with nice formatting
+        print(f"\n{'─'*60}")
+        print(f"🔍 QA Dataset: {dataset_name}")
+        print(f"{'─'*60}")
+        print(f"  Total Questions:     {total_questions}")
+        print(f"  Answered Questions:  {len(pred_ans)}")
+        print(f"  Accuracy:            {accuracy:.4f} ({accuracy*100:.2f}%)")
+        print(f"  Mean Querying Time:  {elapsed_time:.2f}s")
+        print(f"{'─'*60}")
 
         # Print accuracy breakdown
         if len(pred_ans) > 0:
-            print(f"Accuracy Breakdown: {dataset_name}")
+            print(f"\n📊 Accuracy Breakdown: {dataset_name}")
 
             # Per-option accuracy
-            print("Per-Option Accuracy:")
+            print("\n  Per-Option Accuracy:")
             all_options = sorted(
                 set(
                     list(option_total[dataset_name].keys())
@@ -242,10 +250,10 @@ def main(grid: Grid, context: Context) -> None:
                 correct = option_correct[dataset_name].get(option, 0)
                 total = option_total[dataset_name].get(option, 0)
                 acc = correct / total if total > 0 else 0.0
-                print(f"  Option {option}: {acc:.4f} ({correct}/{total})")
+                print(f"    Option {option}: {acc:.4f} ({correct}/{total})")
 
             # Option distribution (predictions)
-            print("Option Distribution (Predicted):")
+            print("\n  Option Distribution (Predicted):")
             total_predictions = sum(option_predictions[dataset_name].values())
             if total_predictions > 0:
                 option_percentages = []
@@ -253,11 +261,11 @@ def main(grid: Grid, context: Context) -> None:
                     count = option_predictions[dataset_name].get(option, 0)
                     percentage = (count / total_predictions) * 100
                     option_percentages.append(f"{option}: {percentage:.1f}%")
-                print("  " + ", ".join(option_percentages))
+                print("    " + ", ".join(option_percentages))
 
             # Confusion Matrix
-            print("Confusion Matrix:")
-            print("       " + "    ".join(all_options))
+            print("\n🧮 Confusion Matrix:")
+            print("         " + "    ".join(all_options))
             for expected_opt in all_options:
                 row_values = []
                 for predicted_opt in all_options:
@@ -265,5 +273,5 @@ def main(grid: Grid, context: Context) -> None:
                         predicted_opt, 0
                     )
                     row_values.append(f"{count:4d}")
-                print(f"{expected_opt}  " + "  ".join(row_values))
+                print(f"    {expected_opt}    " + "    ".join(row_values))
             print()  # Empty line for separation

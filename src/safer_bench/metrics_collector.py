@@ -48,13 +48,14 @@ class MetricsCollector:
         """
         metrics = {}
 
-        # Pattern to match dataset blocks
-        # QA Dataset: pubmedqa
-        # Total Questions: 2
-        # Answered Questions: 0
-        # Accuracy: 0.0
-        # Mean Querying Time: nan
-        dataset_pattern = r"QA Dataset: (\w+)\s*\n.*?Total Questions: (\d+)\s*\n.*?Answered Questions: (\d+)\s*\n.*?Accuracy: ([\d.]+)\s*\n.*?Mean Querying Time: ([\d.nan]+)"
+        # Pattern to match dataset blocks from formatted output with leading spaces
+        # 🔍 QA Dataset: pubmedqa
+        # ────────────────────────────────────────────────────────────
+        #   Total Questions:     2
+        #   Answered Questions:  2
+        #   Accuracy:            0.0000 (0.00%)
+        #   Mean Querying Time:  6.48s
+        dataset_pattern = r"QA Dataset:\s*(\w+)\s*\n.*?Total Questions:\s+(\d+)\s*\n.*?Answered Questions:\s+(\d+)\s*\n.*?Accuracy:\s+([\d.]+).*?\n.*?Mean Querying Time:\s+([\d.nan]+)s?"
 
         matches = re.finditer(dataset_pattern, stdout, re.MULTILINE | re.DOTALL)
 
