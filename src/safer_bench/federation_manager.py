@@ -504,7 +504,6 @@ class FederationManager:
             job = await ds_task
 
             ds_logs: Dict = self.ds_client.job.get_logs(job)
-            self.ds_client.job.show_logs(job)
 
             ds_result = {
                 "status": "success",
@@ -1029,15 +1028,10 @@ class FederationManager:
             logger.debug(f"✅ {do_info.email} is admin on their datasite")
 
 
-def _run_ds_job_in_process(ds_email: str, job_uid: str, config_path: str) -> None:
-    """Run DS job in a separate process.
-
-    This function must be at module level to be picklable by ProcessPoolExecutor.
-    Each process gets its own environment and reconstructs the DS client.
+def _setup_job_process_environment(config_path: str) -> None:
+    """Configure logging and environment variables for job process.
 
     Args:
-        ds_email: Data scientist email
-        job_uid: Job UID to execute
         config_path: Path to SyftBox client config file
     """
     # Disable verbose syft library logs in this process
@@ -1051,6 +1045,21 @@ def _run_ds_job_in_process(ds_email: str, job_uid: str, config_path: str) -> Non
 
     # Set HuggingFace cache to use shared location (avoid re-downloading models)
     os.environ["HF_HOME"] = str(Path.home() / ".cache" / "huggingface")
+
+
+def _run_ds_job_in_process(ds_email: str, job_uid: str, config_path: str) -> None:
+    """Run DS job in a separate process.
+
+    This function must be at module level to be picklable by ProcessPoolExecutor.
+    Each process gets its own environment and reconstructs the DS client.
+
+    Args:
+        ds_email: Data scientist email
+        job_uid: Job UID to execute
+        config_path: Path to SyftBox client config file
+    """
+    # Configure logging and environment for this process
+    _setup_job_process_environment(config_path)
 
     # Initialize session as admin on own datasite using the config
     ds_client = init_session(
@@ -1083,17 +1092,8 @@ def _run_do_job_in_process(do_email: str, job_uid: str, config_path: str) -> Non
         job_uid: Job UID to execute
         config_path: Path to SyftBox client config file
     """
-    # Disable verbose syft library logs in this process
-    logger.disable("syft_event")
-    # logger.disable("syft_rds")
-    logger.disable("syft_crypto")
-    logger.disable("syft_flwr")
-
-    # Set environment for this process
-    os.environ["SYFTBOX_CLIENT_CONFIG_PATH"] = config_path
-
-    # Set HuggingFace cache to use shared location (avoid re-downloading models)
-    os.environ["HF_HOME"] = str(Path.home() / ".cache" / "huggingface")
+    # Configure logging and environment for this process
+    _setup_job_process_environment(config_path)
 
     # Initialize session as admin on own datasite using the config
     do_client = init_session(

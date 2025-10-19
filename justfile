@@ -37,25 +37,25 @@ run-dry-inspect federation="local_2do":
     uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 runtime.clean=false federation={{federation}}
 
 # Production: run with inspection (keep directories for debugging)
-run-inspect-full federation="local_2do":
+run-inspect federation="local_2do":
     @echo -e "{{_yellow}}🔍 Running SAFER-Bench FULL mode with directories kept for inspection ({{federation}})...{{_nc}}"
     uv run python src/safer_bench/main.py dataset.use_subset=false runtime.clean=false federation={{federation}}
 
-# Development sweep: quick parameter exploration with subsets
-sweep-dry:
-    @echo -e "{{_cyan}}🔍 Running parameter sweep in SUBSET mode...{{_nc}}"
-    uv run python src/safer_bench/main.py --multirun \
-        dataset.use_subset=true \
-        federation=local_2do,local_3do \
-        federation.approval.percentage=0.5,1.0
+# # Development sweep: quick parameter exploration with subsets
+# sweep-dry:
+#     @echo -e "{{_cyan}}🔍 Running parameter sweep in SUBSET mode...{{_nc}}"
+#     uv run python src/safer_bench/main.py --multirun \
+#         dataset.use_subset=true \
+#         federation=local_2do,local_3do \
+#         federation.approval.percentage=0.5,1.0
 
-# Production sweep: full parameter exploration (long-running)
-sweep:
-    @echo -e "{{_green}}🔍 Running parameter sweep in FULL mode...{{_nc}}"
-    uv run python src/safer_bench/main.py --multirun \
-        dataset.use_subset=false \
-        federation=local_2do,local_3do,local_4do \
-        federation.approval.percentage=0.25,0.5,0.75,1.0
+# # Production sweep: full parameter exploration (long-running)
+# sweep:
+#     @echo -e "{{_green}}🔍 Running parameter sweep in FULL mode...{{_nc}}"
+#     uv run python src/safer_bench/main.py --multirun \
+#         dataset.use_subset=false \
+#         federation=local_2do,local_3do,local_4do \
+#         federation.approval.percentage=0.25,0.5,0.75,1.0
 
 # Show current configuration
 show-config:
