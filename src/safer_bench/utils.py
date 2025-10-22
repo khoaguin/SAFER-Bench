@@ -48,7 +48,8 @@ def display_config(cfg: DictConfig):
     logger.info("=" * 80)
 
     # Convert to YAML string for clean display
-    config_yaml = OmegaConf.to_yaml(cfg, resolve=True)
+    # Don't resolve interpolations here - they'll be resolved at runtime
+    config_yaml = OmegaConf.to_yaml(cfg, resolve=False)
 
     # Add emoji sections for better readability
     formatted_config = config_yaml

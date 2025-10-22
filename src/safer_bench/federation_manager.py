@@ -503,6 +503,7 @@ class FederationManager:
             # Wait for DS server to complete
             job = await ds_task
 
+            # Get DS job logs
             ds_logs: Dict = self.ds_client.job.get_logs(job)
 
             ds_result = {
@@ -510,6 +511,7 @@ class FederationManager:
                 "stdout": ds_logs.get("stdout", ""),
                 "stderr": ds_logs.get("stderr", ""),
                 "logs_dir": ds_logs.get("logs_dir", ""),
+                "job": job,
             }
 
             # Cancel DO tasks when DS completes (following syft_flwr pattern)

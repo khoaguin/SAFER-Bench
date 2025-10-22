@@ -330,7 +330,7 @@ class MetricsCollector:
                 start_time=start_time.isoformat(),
                 end_time=end_time.isoformat(),
                 duration_seconds=(end_time - start_time).total_seconds(),
-                configuration=OmegaConf.to_container(self.cfg, resolve=True),
+                configuration=OmegaConf.to_container(self.cfg, resolve=False),
             ),
             federation=FederationMetrics(
                 num_data_owners=federation_info.num_data_owners,

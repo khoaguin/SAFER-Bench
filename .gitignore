@@ -7,17 +7,17 @@ datasets/*
 
 .DS_Store
 
-**local_syftbox_network
-**.server
-**.syftbox
+# AI artifacts
 **.claude
 
+# run artifacts
+**local_syftbox_network
+**safer_bench_network
+**.server
+**.syftbox
 **__pycache__
-
 logs/
-
 outputs/
 multirun/
 results/
-
-**safer_bench_network
+.ml-flow/

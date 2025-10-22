@@ -4,6 +4,7 @@ Coordinates the entire federated RAG benchmarking workflow.
 """
 
 from datetime import datetime
+from pathlib import Path
 from typing_extensions import List
 
 from omegaconf import DictConfig
@@ -18,6 +19,7 @@ from safer_bench.models import (
 )
 from safer_bench.metrics_collector import MetricsCollector
 from safer_bench.results_reporter import ResultsReporter
+from safer_bench.mlflow_tracker import MLflowTracker
 
 
 class BenchmarkRunner:
@@ -43,6 +45,10 @@ class BenchmarkRunner:
         self.federation_manager.benchmark_id = self.benchmark_id
         self.fedrag_adapter.benchmark_id = self.benchmark_id
 
+        # Initialize MLflow tracker
+        mlflow_enabled = cfg.get("mlflow", {}).get("enabled", False)
+        self.mlflow_tracker = MLflowTracker(cfg, enabled=mlflow_enabled)
+
     async def run(self) -> BenchmarkMetrics:
         """Execute the complete benchmark workflow.
 
@@ -51,6 +57,19 @@ class BenchmarkRunner:
         """
         self.start_time = datetime.now()
         logger.info(f"🚀 Starting SaferBench run: {self.benchmark_id}")
+
+        # Start MLflow run
+        run_name = f"SaferBench_{self.cfg.federation.name}_{self.benchmark_id}"
+        self.mlflow_tracker.start_run(
+            run_name=run_name,
+            tags={
+                "federation": self.cfg.federation.name,
+                "num_data_owners": str(self.cfg.federation.num_data_owners),
+            },
+        )
+
+        # Log configuration to MLflow
+        self.mlflow_tracker.log_config(self.cfg)
 
         try:
             # Stage 1: Setup federation (DOs and DS datasites)
@@ -141,6 +160,41 @@ class BenchmarkRunner:
                 f"   DS server status: {fedrag_results.ds_server_result.status}"
             )
 
+            # Log job artifacts to MLflow if enabled
+            if self.mlflow_tracker.enabled:
+                logger.debug("Logging job artifacts to MLflow...")
+
+                # Log DO job artifacts
+                for job_info in fedrag_results.job_results:
+                    if job_info.job and job_info.client:
+                        try:
+                            job_logs = job_info.client.job.get_logs(job_info.job)
+                            self.mlflow_tracker.log_job_artifacts(
+                                job_uid=job_info.job.uid.hex[:8],
+                                job_name=job_info.job.name,
+                                dataset_name=job_info.job.dataset_name,
+                                job_status=job_info.job.status.value,
+                                logs_dir=Path(job_logs["logs_dir"]),
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to log DO job {job_info.do_email} artifacts: {e}"
+                            )
+
+                # Log DS server job artifacts
+                ds_result = fedrag_results.ds_server_result
+                if ds_result.job and ds_result.logs_dir:
+                    try:
+                        self.mlflow_tracker.log_job_artifacts(
+                            job_uid=ds_result.job.uid.hex[:8],
+                            job_name=ds_result.job.name,
+                            dataset_name=ds_result.job.dataset_name,
+                            job_status=ds_result.job.status.value,
+                            logs_dir=Path(ds_result.logs_dir),
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to log DS job artifacts: {e}")
+
             # Stage 8: Collect and save metrics
             logger.info("=" * 60)
             logger.info(
@@ -163,6 +217,14 @@ class BenchmarkRunner:
                 metrics, self.benchmark_id
             )
 
+            # Log metrics and artifacts to MLflow
+            self.mlflow_tracker.log_benchmark_metrics(metrics)
+            self.mlflow_tracker.log_summary_artifacts(
+                metrics_file,
+                summary_file,
+                metrics_file.parent,
+            )
+
             # Log summary to console
             logger.info("\n" + "=" * 60)
             logger.info("📊 BENCHMARK RESULTS SUMMARY")
@@ -178,12 +240,34 @@ class BenchmarkRunner:
             logger.success("=" * 60)
             logger.success(f"🎉 Benchmark complete! ID: {self.benchmark_id}")
             logger.success(f"📊 Results saved to: {self.cfg.evaluation.output_dir}")
+
+            # End MLflow run with success status
+            self.mlflow_tracker.end_run(status="FINISHED")
+
+            # Log MLflow tracking info
+            if self.mlflow_tracker.enabled:
+                run_id = self.mlflow_tracker.get_run_id()
+                tracking_uri = self.mlflow_tracker.get_tracking_uri()
+                if run_id:
+                    logger.info(f"📊 MLflow Run ID: {run_id}")
+                if tracking_uri:
+                    logger.info(f"📊 MLflow Tracking URI: {tracking_uri}")
+                    logger.info("")
+                    logger.info("   To view results in MLflow UI, run:")
+                    logger.info(
+                        f"   > mlflow ui --backend-store-uri {tracking_uri} --port 5001"
+                    )
+                    logger.info("")
+                    logger.info("   Then open: http://127.0.0.1:5001")
+
             logger.success("=" * 60)
 
             return metrics
 
         except Exception as e:
             logger.error(f"❌ Benchmark failed: {e}")
+            # End MLflow run with failed status
+            self.mlflow_tracker.end_run(status="FAILED")
             raise
         finally:
             # Conditional cleanup based on configuration

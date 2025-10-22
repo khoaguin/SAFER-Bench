@@ -139,6 +139,11 @@ class DSServerResult(BaseModel):
     stdout: Optional[str] = Field(None, description="Standard output")
     stderr: Optional[str] = Field(None, description="Standard error")
     error: Optional[str] = Field(None, description="Error message if failed")
+    logs_dir: Optional[str] = Field(None, description="Path to logs directory")
+    job: Optional["Job"] = Field(None, description="DS Job object")
+
+    class Config:
+        arbitrary_types_allowed = True  # Allow Syft Job objects
 
 
 class FedRAGExecutionResult(BaseModel):

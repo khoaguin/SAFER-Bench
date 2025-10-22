@@ -13,6 +13,12 @@ dataset:
 runtime:
   clean: true  # Cleanup federation directories after run (set to false to keep for inspection)
 
+# MLflow experiment tracking
+mlflow:
+  enabled: true  # Set to true to enable MLflow tracking
+  tracking_uri: "auto"  # Automatically set to <hydra_output_dir>/.mlflow
+  experiment_name: "SaferBench"  # Name for the MLflow experiment
+
 # QA Datasets
 qa:
   datasets: "pubmedqa|bioasq"
