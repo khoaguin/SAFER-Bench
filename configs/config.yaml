@@ -22,7 +22,7 @@ mlflow:
 # QA Datasets
 qa:
   datasets: "pubmedqa|bioasq"
-  num_questions: 10  # Number of questions per dataset. When run dry, will be 2
+  num_questions: 100  # Number of questions per dataset. When run dry, will be 2
   query_types: ["factual", "reasoning", "comparative"]  # From README
 
 # Retrieval parameters

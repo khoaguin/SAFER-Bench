@@ -21,3 +21,7 @@ outputs/
 multirun/
 results/
 .ml-flow/
+
+# Writing artifacts
+docs/plans/
+docs/paper/

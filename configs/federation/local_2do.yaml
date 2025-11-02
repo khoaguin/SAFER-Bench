@@ -9,12 +9,12 @@ aggregator: "ds@saferbench.com"
 do1:
   email: "do1@saferbench.com"
   dataset: "statpearls"
-  data_fraction: 0.5
+  data_fraction: 1
 
 do2:
   email: "do2@saferbench.com"
   dataset: "textbooks"
-  data_fraction: 0.5
+  data_fraction: 1
 
 # Federation approval behavior
 approval:
