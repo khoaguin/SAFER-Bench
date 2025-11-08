@@ -1,7 +1,7 @@
 from typing_extensions import Optional, List, Any, Dict, Annotated
 from enum import Enum
 
-from pydantic import BaseModel, Field, EmailStr, field_validator
+from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
 
 from syft_rds.client.rds_client import RDSClient
 from syft_rds.models import Job
@@ -11,24 +11,103 @@ Percentage = Annotated[float, Field(ge=0.0, le=1.0)]
 
 
 class DataOwnerInfo(BaseModel):
-    """Information about a data owner in the federation."""
+    """Information about a data owner in the federation.
+
+    Supports multiple distribution strategies:
+    - 'single': Each DO gets one complete dataset
+    - 'hybrid': Each DO gets configurable portions of multiple datasets
+    - 'topic': Each DO gets documents filtered by medical specialties
+    - 'centralized': Single DO gets all datasets merged
+    """
 
     email: EmailStr
-    dataset: str = Field(..., min_length=1, description="Dataset name")
-    data_fraction: float = Field(
-        ..., gt=0.0, le=1.0, description="Fraction of dataset (0-1]"
+
+    # Unified datasets field: Dict of dataset_name -> proportion
+    # For single/topic/centralized: use 1.0 for all datasets
+    # For hybrid: use fractional values that sum to 1.0
+    datasets: Dict[str, float] = Field(
+        ...,
+        description="Dict of dataset_name: proportion (0-1]. Use 1.0 for full dataset.",
     )
 
-    @field_validator("dataset")
+    # Topics for filtering (only used with 'topic' strategy)
+    topics: Optional[List[str]] = Field(
+        None,
+        description="List of medical topics/specialties for 'topic' strategy",
+    )
+
+    # Distribution strategy type
+    distribution_strategy: str = Field(
+        "single",
+        description="Strategy: 'single', 'hybrid', 'topic', or 'centralized'",
+    )
+
+    @field_validator("datasets")
     @classmethod
-    def validate_dataset(cls, v: str) -> str:
-        """Ensure dataset name is valid."""
+    def validate_datasets(cls, v: Dict[str, float]) -> Dict[str, float]:
+        """Validate dataset names and proportions."""
         valid_datasets = ["statpearls", "textbooks", "mimic-iv-note", "mimic-iv-bhc"]
-        if v not in valid_datasets:
+
+        # Validate dataset names
+        for dataset_name in v.keys():
+            if dataset_name not in valid_datasets:
+                raise ValueError(
+                    f"Invalid dataset name: {dataset_name}. Must be one of {valid_datasets}."
+                )
+
+        # Validate proportions are in valid range
+        for dataset_name, proportion in v.items():
+            if not (0 < proportion <= 1.0):
+                raise ValueError(
+                    f"Proportion for {dataset_name} must be in (0, 1], got {proportion}"
+                )
+
+        return v
+
+    @field_validator("distribution_strategy")
+    @classmethod
+    def validate_strategy(cls, v: str) -> str:
+        """Validate distribution strategy."""
+        valid_strategies = ["single", "hybrid", "topic", "centralized"]
+        if v not in valid_strategies:
             raise ValueError(
-                f"Invalid dataset name: {v}. Must be one of {valid_datasets}."
+                f"Invalid distribution strategy: {v}. Must be one of {valid_strategies}."
             )
         return v
+
+    @model_validator(mode="after")
+    def validate_strategy_config(self) -> "DataOwnerInfo":
+        """Validate that configuration matches distribution strategy."""
+        if self.distribution_strategy == "single":
+            # Single strategy: should have exactly one dataset
+            if len(self.datasets) != 1:
+                raise ValueError(
+                    f"'single' strategy requires exactly 1 dataset, got {len(self.datasets)}"
+                )
+
+        elif self.distribution_strategy == "hybrid":
+            # Hybrid strategy: proportions should sum to ~1.0
+            total = sum(self.datasets.values())
+            if not (0.99 <= total <= 1.01):
+                raise ValueError(
+                    f"'hybrid' strategy requires proportions to sum to 1.0, got {total:.3f}"
+                )
+
+        elif self.distribution_strategy == "topic":
+            # Topic strategy: requires topics field
+            if self.topics is None or len(self.topics) == 0:
+                raise ValueError(
+                    "'topic' strategy requires 'topics' field with at least one topic"
+                )
+
+        elif self.distribution_strategy == "centralized":
+            # Centralized: should have multiple datasets, all at 1.0
+            if len(self.datasets) < 2:
+                raise ValueError(
+                    f"'centralized' strategy requires at least 2 datasets, got {len(self.datasets)}"
+                )
+
+        return self
 
 
 class FederationInfo(BaseModel):

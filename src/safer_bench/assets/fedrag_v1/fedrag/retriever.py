@@ -113,10 +113,13 @@ class Retriever:
         return
 
     def query_faiss_index(self, dataset_name, query, knn=8):
-        index_path, doc_ids_path, chunk_dir = _get_dataset_dirs(dataset_name)
+        # Check if index exists, build if needed
+        if not self.index_exists(dataset_name):
+            print(f"FAISS index not found for {dataset_name}. Building index...")
+            self.build_faiss_index(dataset_name)
+            print(f"FAISS index built successfully for {dataset_name}")
 
-        if not doc_ids_path.exists() or not index_path.exists():
-            raise RuntimeError("FAISS index is not built yet.")
+        index_path, doc_ids_path, chunk_dir = _get_dataset_dirs(dataset_name)
 
         # 1. Load the FAISS index and document IDs
         index = faiss.read_index(str(index_path))
@@ -163,7 +166,10 @@ class Retriever:
 
 def _get_dataset_dirs(dataset_name: str) -> Tuple[Path, Path, Path]:
     """
-    Return index, doc ids and chunk dirs
+    Return index, doc ids and chunk dirs.
+
+    Note: Index and doc_ids files may not exist yet for partitioned datasets.
+    They will be built on-demand by the Retriever when first queried.
     """
 
     from syft_flwr.utils import get_syftbox_dataset_path, run_syft_flwr
@@ -177,8 +183,7 @@ def _get_dataset_dirs(dataset_name: str) -> Tuple[Path, Path, Path]:
     doc_ids_path = data_dir / "all_doc_ids.npy"
     chunk_dir = data_dir / "chunk"
 
-    assert index_path.exists(), f"Index path {index_path} does not exist"
-    assert doc_ids_path.exists(), f"Doc ids path {doc_ids_path} does not exist"
+    # Only assert chunk directory exists (required for building index)
     assert chunk_dir.exists(), f"Chunk directory {chunk_dir} does not exist"
 
     return index_path, doc_ids_path, chunk_dir
