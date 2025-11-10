@@ -27,8 +27,8 @@ dev = [
     "pre-commit>=4.3.0",
 ]
 
-# [tool.uv.sources]
-# syft-flwr = { path = "/Users/khoaguin/Desktop/projects/OpenMined/syft-flwr", editable = true }  # for development
+[tool.uv.sources]
+syft-flwr = { path = "/Users/khoaguin/Desktop/projects/OpenMined/syft-flwr", editable = true }  # for development
 # syft-flwr = { git = "https://github.com/OpenMined/syft-flwr/", branch = "feat/rds-dashboard-integration" }  # for development
 
 [build-system]

@@ -209,7 +209,9 @@ class FedRAGProjectAdapter:
 
         # Corpus configuration (from federation)
         if federation_info:
-            corpus_names = "|".join([do.dataset for do in federation_info.data_owners])
+            corpus_names = "|".join(
+                [do.get_dataset_name() for do in federation_info.data_owners]
+            )
             app_config["clients-corpus-names"] = corpus_names
 
         # Merger configuration

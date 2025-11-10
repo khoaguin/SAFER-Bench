@@ -337,8 +337,9 @@ class MetricsCollector:
                 data_owners=[
                     {
                         "email": do.email,
-                        "dataset": do.dataset,
-                        "data_fraction": do.data_fraction,
+                        "dataset": do.get_dataset_name(),
+                        "distribution_strategy": do.distribution_strategy,
+                        "datasets": do.datasets,
                     }
                     for do in federation_info.data_owners
                 ],

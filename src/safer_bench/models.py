@@ -42,6 +42,12 @@ class DataOwnerInfo(BaseModel):
         description="Strategy: 'single', 'hybrid', 'topic', or 'centralized'",
     )
 
+    # Runtime field: partition name (set after partitioning)
+    partition_name: Optional[str] = Field(
+        None,
+        description="Partition directory name (set automatically during partitioning)",
+    )
+
     @field_validator("datasets")
     @classmethod
     def validate_datasets(cls, v: Dict[str, float]) -> Dict[str, float]:
@@ -108,6 +114,15 @@ class DataOwnerInfo(BaseModel):
                 )
 
         return self
+
+    def get_dataset_name(self) -> str:
+        """Get the dataset name to use for uploads and job submission.
+
+        Returns partition name if set, otherwise the first dataset key.
+        """
+        if self.partition_name:
+            return self.partition_name
+        return list(self.datasets.keys())[0]
 
 
 class FederationInfo(BaseModel):

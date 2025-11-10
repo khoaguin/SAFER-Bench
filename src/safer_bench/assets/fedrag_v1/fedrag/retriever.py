@@ -50,6 +50,10 @@ class Retriever:
         if num_chunks:
             all_files = all_files[:num_chunks]
 
+        # Log start of index building
+        print(f"[DO] 🔨 Building FAISS index for dataset: {dataset_name}")
+        print(f"[DO] 📁 Found {len(all_files)} chunk files to process")
+
         # Loop through all the .jsonl files, load the id and the content of
         # each document and for each document generate its embeddings
         for filename in tqdm(all_files):
@@ -110,6 +114,8 @@ class Retriever:
         # Save document IDs
         np.save(str(doc_ids_path), np.array(all_doc_ids))
 
+        print(f"[DO] ✅ FAISS index built successfully for {dataset_name}")
+
         return
 
     def query_faiss_index(self, dataset_name, query, knn=8):
@@ -144,7 +150,21 @@ class Retriever:
         for i, (doc_id, doc_score) in enumerate(zip(retrieved_doc_ids, doc_scores)):
             doc_pref_suf = doc_id.split("_")
             doc_name, snippet_idx = "_".join(doc_pref_suf[:-1]), int(doc_pref_suf[-1])
+
+            # Try exact match first (for single dataset scenarios)
             full_file = chunk_dir / (doc_name + ".jsonl")
+
+            # If not found, search for prefixed version (for centralized/hybrid partitions)
+            # e.g., statpearls_article-31824.jsonl
+            if not full_file.exists():
+                matching_files = list(chunk_dir.glob(f"*_{doc_name}.jsonl"))
+                if matching_files:
+                    full_file = matching_files[0]
+                else:
+                    raise FileNotFoundError(
+                        f"Cannot find chunk file for {doc_name} in {chunk_dir}"
+                    )
+
             loaded_snippet = json.loads(
                 open(full_file).read().strip().split("\n")[snippet_idx]
             )

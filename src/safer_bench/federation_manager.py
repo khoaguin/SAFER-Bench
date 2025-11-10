@@ -21,6 +21,7 @@ from syft_rds.client.rds_client import RDSClient, init_session
 from syft_rds.models import Job
 
 from safer_bench.dataset_utils import get_dataset_path, validate_dataset_exists
+from safer_bench.data_partitioner import DataPartitioner
 from safer_bench.models import (
     DataOwnerInfo,
     JobInfo,
@@ -103,6 +104,10 @@ class FederationManager:
         try:
             # Clean up any previous runs
             await self.cleanup()
+
+            # Prepare data partitions (if needed)
+            logger.info("🔧 Preparing data partitions")
+            self._prepare_data_partitions()
 
             # Setup Data Scientist (aggregator)
             logger.info(f"Setting up aggregator: {self.aggregator_email}")
@@ -324,25 +329,26 @@ class FederationManager:
                 async with self._state_lock:
                     self._guest_clients.append(guest_client)
 
+                dataset_name = do_info.get_dataset_name()
                 logger.info(
-                    f"Submitting job to {do_info.email} for dataset {do_info.dataset}"
+                    f"Submitting job to {do_info.email} for dataset {dataset_name}"
                 )
 
                 # Submit job using syft_rds client
                 job = guest_client.job.submit(
                     name=f"fedrag_benchmark_{benchmark_id}",
                     user_code_path=fedrag_project_path,
-                    dataset_name=do_info.dataset,
+                    dataset_name=dataset_name,
                     entrypoint="main.py",
                 )
 
                 job_info = JobInfo(
                     job=job,
                     do_email=do_info.email,
-                    dataset=do_info.dataset,
+                    dataset=dataset_name,
                     client=guest_client,
                     status=JobProcessingStatus.submission_succeeded,  # Jobs start pending review
-                    data_fraction=do_info.data_fraction,
+                    data_fraction=1.0,
                     benchmark_id=benchmark_id,
                 )
                 jobs_info.append(job_info)
@@ -354,7 +360,7 @@ class FederationManager:
                 job_info = JobInfo(
                     job=None,
                     do_email=do_info.email,
-                    dataset=do_info.dataset,
+                    dataset=do_info.get_dataset_name(),
                     client=None,
                     status=JobProcessingStatus.submission_failed,  # Job submission failed
                     error=str(e),
@@ -791,19 +797,37 @@ class FederationManager:
         try:
             logger.debug(f"📤 Starting dataset upload for {do_info.email}")
 
-            # Validate dataset exists before attempting upload
-            if not validate_dataset_exists(
-                do_info.dataset, self.use_subset, self.root_dir
-            ):
-                raise FileNotFoundError(
-                    f"Dataset {do_info.dataset} not found in {'subset' if self.use_subset else 'full'} mode"
+            # Determine dataset path based on distribution strategy
+            if do_info.partition_name:
+                # Use partitioned dataset
+                mode_dir = "subsets" if self.use_subset else "full"
+                corpus_path = (
+                    self.root_dir
+                    / "datasets"
+                    / mode_dir
+                    / "partitions"
+                    / do_info.partition_name
                 )
+                dataset_name = do_info.partition_name
+                logger.debug(f"Using partitioned dataset: {dataset_name}")
+            else:
+                # Use single original dataset
+                dataset_name = list(do_info.datasets.keys())[
+                    0
+                ]  # Get first (and only) dataset
 
-            # Get dataset paths
-            corpus_path: Path = get_dataset_path(
-                do_info.dataset, self.use_subset, self.root_dir
-            )
-            dataset_name = do_info.dataset
+                # Validate dataset exists
+                if not validate_dataset_exists(
+                    dataset_name, self.use_subset, self.root_dir
+                ):
+                    raise FileNotFoundError(
+                        f"Dataset {dataset_name} not found in {'subset' if self.use_subset else 'full'} mode"
+                    )
+
+                corpus_path = get_dataset_path(
+                    dataset_name, self.use_subset, self.root_dir
+                )
+                logger.debug(f"Using original dataset: {dataset_name}")
 
             # Get DO client - protect with lock
             async with self._state_lock:
@@ -815,7 +839,7 @@ class FederationManager:
             mock_path = corpus_path / "mock"
             if not private_path.exists() or not mock_path.exists():
                 raise FileNotFoundError(
-                    f"Dataset paths not found for {do_info.dataset}"
+                    f"Dataset paths not found for {dataset_name}: private={private_path}, mock={mock_path}"
                 )
 
             dataset = do_client.dataset.create(
@@ -833,19 +857,19 @@ class FederationManager:
 
             return DatasetUploadInfo(
                 do_email=do_info.email,
-                dataset_name=do_info.dataset,
+                dataset_name=dataset_name,
                 syft_dataset_name=dataset_name,
                 dataset_object=dataset,
                 corpus_path=str(corpus_path),
                 status=DatasetUploadStatus.success,
-                data_fraction=do_info.data_fraction,
+                data_fraction=1.0,  # Always 1.0 since we upload the entire partition/dataset
             )
 
         except Exception as e:
             logger.error(f"❌ Dataset upload failed for {do_info.email}: {e}")
             return DatasetUploadInfo(
                 do_email=do_info.email,
-                dataset_name=do_info.dataset,
+                dataset_name=dataset_name if "dataset_name" in locals() else "unknown",
                 status=DatasetUploadStatus.failed,
                 error=str(e),
                 error_type=type(e).__name__,
@@ -915,12 +939,78 @@ class FederationManager:
             data_owners.append(
                 DataOwnerInfo(
                     email=do_config.email,
-                    dataset=do_config.dataset,
-                    data_fraction=do_config.data_fraction,
+                    datasets=dict(do_config.datasets),  # Convert OmegaConf to dict
+                    distribution_strategy=do_config.get(
+                        "distribution_strategy", "single"
+                    ),
+                    topics=list(do_config.topics)
+                    if hasattr(do_config, "topics")
+                    else None,
                 )
             )
 
         return data_owners
+
+    def _prepare_data_partitions(self) -> None:
+        """Prepare custom data partitions based on DO distribution strategies.
+
+        For 'hybrid' and 'centralized' strategies, creates partitioned datasets
+        by sampling/merging chunks. Partitions are created in datasets/{mode}/partitions/.
+        """
+        # Check if any DO needs partitioning
+        needs_partitioning = any(
+            do.distribution_strategy in ["hybrid", "centralized"]
+            for do in self.data_owners
+        )
+
+        if not needs_partitioning:
+            logger.debug("No partitioning needed (all DOs using 'single' strategy)")
+            return
+
+        # Initialize partitioner
+        partitioner = DataPartitioner(seed=42)
+
+        # Create partitions for each DO that needs one
+        for do_info in self.data_owners:
+            if do_info.distribution_strategy == "single":
+                logger.debug(
+                    f"No partitioning needed for {do_info.email}, will use original dataset"
+                )
+                continue
+
+            # Create partition directory
+            mode_dir = "subsets" if self.use_subset else "full"
+            partitions_base = self.root_dir / "datasets" / mode_dir / "partitions"
+            partitions_base.mkdir(parents=True, exist_ok=True)
+
+            # Create unique partition name
+            partition_name = (
+                f"{do_info.email.split('@')[0]}_{do_info.distribution_strategy}"
+            )
+            partition_path = partitions_base / partition_name / "private"
+
+            logger.info(
+                f"Creating {do_info.distribution_strategy} partition for {do_info.email}"
+            )
+
+            if do_info.distribution_strategy == "hybrid":
+                partitioner.create_hybrid_partition(
+                    datasets=do_info.datasets,
+                    output_path=partition_path,
+                    use_subset=self.use_subset,
+                    project_root_dir=self.root_dir,
+                )
+            elif do_info.distribution_strategy == "centralized":
+                partitioner.create_centralized_partition(
+                    datasets=do_info.datasets,
+                    output_path=partition_path,
+                    use_subset=self.use_subset,
+                    project_root_dir=self.root_dir,
+                )
+
+            # Store partition name in DO info for later use
+            do_info.partition_name = partition_name
+            logger.success(f"✅ Partition created: {partition_name}")
 
     async def _setup_aggregator(self) -> RDSClient:
         """Setup the data scientist/aggregator node.
@@ -991,7 +1081,7 @@ class FederationManager:
             self.do_clients[do_info.email] = do_client
 
         logger.debug(
-            f"Data owner setup complete: {do_info.email} with dataset {do_info.dataset}"
+            f"Data owner setup complete: {do_info.email} with dataset {do_info.get_dataset_name()}"
         )
 
     async def _verify_federation(self) -> None:
@@ -1047,6 +1137,10 @@ def _setup_job_process_environment(config_path: str) -> None:
 
     # Set HuggingFace cache to use shared location (avoid re-downloading models)
     os.environ["HF_HOME"] = str(Path.home() / ".cache" / "huggingface")
+
+    # Set message timeout to 10 minutes (600 seconds) to allow for FAISS index building
+    # DOs may need time to build indexes on first query
+    os.environ["SYFT_FLWR_MSG_TIMEOUT"] = "600"
 
 
 def _run_ds_job_in_process(ds_email: str, job_uid: str, config_path: str) -> None:

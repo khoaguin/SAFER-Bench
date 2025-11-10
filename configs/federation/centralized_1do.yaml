@@ -1,0 +1,26 @@
+# Centralized baseline: Single DO with all datasets merged
+# DO1 holds all of StatPearls and Textbooks combined
+name: centralized_1do
+num_data_owners: 1
+
+# Email addresses for the federation participants
+aggregator: "ds@saferbench.com"
+
+# Data Owner configurations
+do1:
+  email: "do1@saferbench.com"
+  distribution_strategy: "centralized"
+  datasets:
+    statpearls: 1.0  # All of statpearls
+    textbooks: 1.0   # All of textbooks
+
+# Federation approval behavior
+approval:
+  percentage: 1.0  # 100% approval rate
+  mechanism: "static"
+
+# Local setup configuration
+setup:
+  mode: "local"
+  root_dir: "."
+  network_key: "saferbench_network"

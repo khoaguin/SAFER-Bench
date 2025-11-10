@@ -32,8 +32,7 @@ class DataPartitioner:
 
     def create_hybrid_partition(
         self,
-        datasets: List[str],
-        proportions: Dict[str, float],
+        datasets: Dict[str, float],
         output_path: Path,
         use_subset: bool = False,
         project_root_dir: Optional[Path] = None,
@@ -41,14 +40,12 @@ class DataPartitioner:
         """Create a hybrid partition combining portions of multiple datasets.
 
         Args:
-            datasets: List of dataset names (e.g., ["statpearls", "textbooks"])
-            proportions: Dict mapping dataset_name to proportion (e.g., {"statpearls": 0.5})
+            datasets: Dict mapping dataset_name to proportion (e.g., {"statpearls": 0.5, "textbooks": 0.5})
             output_path: Path to output partition directory
             use_subset: Whether to use subset or full datasets
             project_root_dir: Optional root directory
         """
         logger.info(f"Creating hybrid partition with datasets: {datasets}")
-        logger.info(f"Proportions: {proportions}")
 
         # Create output directories
         output_chunk_dir = output_path / "chunk"
@@ -56,8 +53,7 @@ class DataPartitioner:
 
         all_sampled_chunks = []
 
-        for dataset_name in datasets:
-            proportion = proportions.get(dataset_name, 0.0)
+        for dataset_name, proportion in datasets.items():
             if proportion <= 0:
                 logger.warning(f"Skipping {dataset_name} (proportion={proportion})")
                 continue
@@ -95,7 +91,7 @@ class DataPartitioner:
 
     def create_topic_partition(
         self,
-        datasets: List[str],
+        datasets: Dict[str, float],
         topics: List[str],
         output_path: Path,
         use_subset: bool = False,
@@ -104,7 +100,7 @@ class DataPartitioner:
         """Create a topic-based partition filtering by medical specialties.
 
         Args:
-            datasets: List of dataset names
+            datasets: Dict of datasets to filter from (proportion values ignored for topic strategy)
             topics: List of medical topics/specialties (e.g., ["cardiology", "neurology"])
             output_path: Path to output partition directory
             use_subset: Whether to use subset or full datasets
@@ -118,7 +114,7 @@ class DataPartitioner:
 
         all_filtered_chunks = []
 
-        for dataset_name in datasets:
+        for dataset_name in datasets.keys():
             # Get source dataset path
             dataset_path = get_dataset_path(dataset_name, use_subset, project_root_dir)
             source_chunk_dir = dataset_path / "private" / "chunk"
@@ -156,7 +152,7 @@ class DataPartitioner:
 
     def create_centralized_partition(
         self,
-        datasets: List[str],
+        datasets: Dict[str, float],
         output_path: Path,
         use_subset: bool = False,
         project_root_dir: Optional[Path] = None,
@@ -164,12 +160,14 @@ class DataPartitioner:
         """Merge all datasets into a single unified corpus.
 
         Args:
-            datasets: List of all dataset names to merge
+            datasets: Dict of all datasets to merge (proportion values should be 1.0 for all)
             output_path: Path to output partition directory
             use_subset: Whether to use subset or full datasets
             project_root_dir: Optional root directory
         """
-        logger.info(f"Creating centralized partition with all datasets: {datasets}")
+        logger.info(
+            f"Creating centralized partition with all datasets: {list(datasets.keys())}"
+        )
 
         # Create output directories
         output_chunk_dir = output_path / "chunk"
@@ -177,7 +175,7 @@ class DataPartitioner:
 
         all_chunks = []
 
-        for dataset_name in datasets:
+        for dataset_name in datasets.keys():
             # Get source dataset path
             dataset_path = get_dataset_path(dataset_name, use_subset, project_root_dir)
             source_chunk_dir = dataset_path / "private" / "chunk"
@@ -355,37 +353,73 @@ class DataPartitioner:
     def _create_mock_dir(
         self,
         output_path: Path,
-        datasets: List[str],
+        datasets: Dict[str, float],
         strategy: str,
         topics: Optional[List[str]] = None,
     ) -> None:
-        """Create mock directory with README describing the partition.
+        """Create mock directory with README and sample chunks.
 
         Args:
-            output_path: Path to partition directory
-            datasets: List of dataset names included
+            output_path: Path to partition directory (private/)
+            datasets: Dict of dataset names and proportions
             strategy: Distribution strategy name
             topics: Optional list of topics (for topic-based strategy)
         """
         mock_dir = output_path.parent / "mock"
-        mock_dir.mkdir(parents=True, exist_ok=True)
+        mock_chunk_dir = mock_dir / "chunk"
+        mock_chunk_dir.mkdir(parents=True, exist_ok=True)
 
-        readme_content = f"""# Partitioned Dataset
+        # Copy a few sample chunks from the private directory
+        private_chunk_dir = output_path / "chunk"
+        chunk_files = list(private_chunk_dir.glob("*.jsonl"))
+
+        # Copy first 10 chunks as samples for mock
+        num_samples = min(10, len(chunk_files))
+        for chunk_file in chunk_files[:num_samples]:
+            dest_file = mock_chunk_dir / chunk_file.name
+            shutil.copy2(chunk_file, dest_file)
+
+        logger.debug(f"Copied {num_samples} sample chunks to mock directory")
+
+        # Create README for both mock and private (Syft requires same file extensions)
+        mock_readme_content = f"""# Partitioned Dataset (Mock/Preview)
 
 **Distribution Strategy**: {strategy}
-**Source Datasets**: {', '.join(datasets)}
+**Source Datasets**: {', '.join(datasets.keys())}
+**Total Chunks**: {num_samples}
+"""
+
+        private_readme_content = f"""# Partitioned Dataset (Private)
+
+**Distribution Strategy**: {strategy}
+**Source Datasets**: {', '.join(datasets.keys())}
+**Total Chunks**: {len(chunk_files)}
 """
 
         if topics:
-            readme_content += f"**Topics**: {', '.join(topics)}\n"
+            mock_readme_content += f"**Topics**: {', '.join(topics)}\n"
+            private_readme_content += f"**Topics**: {', '.join(topics)}\n"
 
-        readme_content += """
+        mock_readme_content += """
 This is a partitioned dataset created for federated RAG benchmarking.
-The FAISS index will be built automatically by the FedRAG app at runtime.
 
-**Note**: This mock directory is for documentation purposes only.
+**Note**: This mock directory contains sample chunks for preview purposes.
+The full dataset is in the private/ directory.
 """
 
-        readme_path = mock_dir / "README.md"
-        readme_path.write_text(readme_content)
-        logger.debug(f"Created mock README at {readme_path}")
+        private_readme_content += """
+This is a partitioned dataset created for federated RAG benchmarking.
+The FAISS index will be built automatically by the FedRAG app at runtime.
+"""
+
+        # Write both READMEs
+        mock_readme_path = mock_dir / "README.md"
+        mock_readme_path.write_text(mock_readme_content)
+
+        # Private README goes in the private directory itself (output_path is already private/)
+        private_readme_path = output_path / "README.md"
+        private_readme_path.write_text(private_readme_content)
+
+        logger.debug(
+            f"Created README files: mock={mock_readme_path}, private={private_readme_path}"
+        )
