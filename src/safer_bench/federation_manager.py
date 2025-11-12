@@ -533,6 +533,9 @@ class FederationManager:
                 logger.debug("DO tasks cancelled after DS completion")
 
             # Process results and create return value
+            # Copy FAISS indexes back to partition directories
+            self._copy_indexes_to_partitions(do_results)
+
             return self._build_execution_result(do_results, ds_result)
 
         finally:
@@ -540,6 +543,85 @@ class FederationManager:
             logger.debug("Shutting down process pool...")
             process_pool.shutdown(wait=True, cancel_futures=False)
             logger.debug("Process pool shutdown complete")
+
+    def _copy_indexes_to_partitions(self, do_results: List) -> None:
+        """Copy built FAISS indexes from SyftBox runtime back to partition directories.
+
+        Args:
+            do_results: List of JobInfo objects with dataset information
+        """
+        logger.info("📦 Copying FAISS indexes back to partition directories...")
+
+        for job_info in do_results:
+            try:
+                do_email = job_info.do_email
+                dataset_name = job_info.dataset
+
+                if not dataset_name:
+                    logger.warning(
+                        f"No dataset_name for {do_email}, skipping index copy"
+                    )
+                    continue
+
+                # Get the SyftBox runtime dataset path (where indexes were built)
+                syftbox_dataset_path = (
+                    self.root_dir
+                    / LOCAL_SYFTBOX_NETWORK
+                    / ".syftbox"
+                    / "private_datasets"
+                    / do_email
+                    / dataset_name
+                )
+
+                # Get the partition source path
+                partition_path = (
+                    self.root_dir
+                    / "datasets"
+                    / ("subsets" if self.use_subset else "full")
+                    / "partitions"
+                    / dataset_name
+                    / "private"
+                )
+
+                # Check if indexes exist in runtime location
+                index_file = syftbox_dataset_path / "faiss.index"
+                doc_ids_file = syftbox_dataset_path / "all_doc_ids.npy"
+
+                logger.debug(f"Looking for indexes at: {syftbox_dataset_path}")
+                logger.debug(
+                    f"Index file exists: {index_file.exists()}, path: {index_file}"
+                )
+                logger.debug(
+                    f"Doc IDs file exists: {doc_ids_file.exists()}, path: {doc_ids_file}"
+                )
+
+                if not index_file.exists() or not doc_ids_file.exists():
+                    logger.warning(
+                        f"Indexes not found for {do_email}/{dataset_name} at {syftbox_dataset_path}"
+                    )
+                    continue
+
+                # Ensure partition directory exists
+                if not partition_path.exists():
+                    logger.warning(
+                        f"Partition directory not found: {partition_path}, skipping index copy"
+                    )
+                    continue
+
+                # Copy index files
+                shutil.copy2(index_file, partition_path / "faiss.index")
+                shutil.copy2(doc_ids_file, partition_path / "all_doc_ids.npy")
+
+                logger.success(
+                    f"✅ Copied FAISS indexes for {dataset_name} to {partition_path}"
+                )
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to copy indexes for {getattr(job_info, 'do_email', 'unknown')}: {e}"
+                )
+
+        logger.info("📦 Index copy complete")
 
     def _cleanup_directory(self, directory: Path, description: str) -> None:
         """Helper method to clean up a directory with retries.

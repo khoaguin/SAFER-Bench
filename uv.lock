@@ -854,7 +854,7 @@ wheels = [
 
 [[package]]
 name = "flwr"
-version = "1.21.0"
+version = "1.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -873,9 +873,9 @@ dependencies = [
     { name = "tomli-w" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/82/37/fbc52888520db062d0e2b551a9acf568238cdf4170faacf77135fae6a431/flwr-1.21.0.tar.gz", hash = "sha256:ee082b5d02fe8cffcf6f2a3385f6fa09138be900f737a1e42eaa59c38e6c8b4e", size = 366375, upload-time = "2025-09-10T10:02:28.387Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1d/44/b8a7b4e348e218d8cb0a13edceddc6f51c8c2696ca2c1f02198a8fa5d90a/flwr-1.23.0.tar.gz", hash = "sha256:f9cc7d044908f1d2c787cd9984b10c3dbee6ed796bbdbe8e8b9fb9fdbde2ae2a", size = 400283, upload-time = "2025-11-03T14:50:46.535Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/64/f07ce75bcb3539a15e8265c42d8bcedc348bb83fe92317847b0541458849/flwr-1.21.0-py3-none-any.whl", hash = "sha256:35aecdfcaea80efac0296c1d27ecd0a0427c8d5905deeada50c23438fec23555", size = 664179, upload-time = "2025-09-10T10:02:26.866Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/0c/ff45fb9b2caf7f2a3ccf78684066add2002833ddcb5b8d778da21c56c9e5/flwr-1.23.0-py3-none-any.whl", hash = "sha256:87a453a89f32c9166eb8f10f1b2fd7fd27a0370203b066e3c390001e7f32357d", size = 731986, upload-time = "2025-11-03T14:50:44.923Z" },
 ]
 
 [package.optional-dependencies]
@@ -3344,16 +3344,16 @@ name = "ray"
 version = "2.31.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiosignal" },
-    { name = "click" },
-    { name = "filelock" },
-    { name = "frozenlist" },
-    { name = "jsonschema" },
-    { name = "msgpack" },
-    { name = "packaging" },
-    { name = "protobuf" },
-    { name = "pyyaml" },
-    { name = "requests" },
+    { name = "aiosignal", marker = "python_full_version < '3.14'" },
+    { name = "click", marker = "python_full_version < '3.14'" },
+    { name = "filelock", marker = "python_full_version < '3.14'" },
+    { name = "frozenlist", marker = "python_full_version < '3.14'" },
+    { name = "jsonschema", marker = "python_full_version < '3.14'" },
+    { name = "msgpack", marker = "python_full_version < '3.14'" },
+    { name = "packaging", marker = "python_full_version < '3.14'" },
+    { name = "protobuf", marker = "python_full_version < '3.14'" },
+    { name = "pyyaml", marker = "python_full_version < '3.14'" },
+    { name = "requests", marker = "python_full_version < '3.14'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/32/2f/58332dbd9eb607bfbeec0d94bab562cf5e2e65882321c1e3e4ec6a00b64e/ray-2.31.0-cp312-cp312-macosx_10_15_x86_64.whl", hash = "sha256:2a1349315a491ac754913fc603cbf9bf39f1dfe8576daba20c4c967f8abb7330", size = 67228942, upload-time = "2024-06-26T21:47:05.713Z" },
@@ -3646,7 +3646,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sentence-transformers", specifier = ">=5.0.0" },
-    { name = "syft-flwr", editable = "../../OpenMined/syft-flwr" },
+    { name = "syft-flwr", specifier = ">=0.4.3" },
     { name = "tomli", specifier = ">=2.3.0" },
     { name = "tomli-w", specifier = ">=1.2.0" },
     { name = "tqdm", specifier = ">=4.67" },
@@ -3983,8 +3983,8 @@ wheels = [
 
 [[package]]
 name = "syft-flwr"
-version = "0.4.2"
-source = { editable = "../../OpenMined/syft-flwr" }
+version = "0.4.3"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "flwr", extra = ["simulation"] },
     { name = "flwr-datasets", extra = ["vision"] },
@@ -3995,31 +3995,9 @@ dependencies = [
     { name = "tomli-w" },
     { name = "typing-extensions" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "flwr", extras = ["simulation"], specifier = "==1.21.0" },
-    { name = "flwr-datasets", extras = ["vision"], specifier = ">=0.5.0" },
-    { name = "loguru", specifier = ">=0.7.3" },
-    { name = "safetensors", specifier = ">=0.6.2" },
-    { name = "syft-rds", specifier = ">=0.5.0" },
-    { name = "tomli", specifier = ">=2.3.0" },
-    { name = "tomli-w", specifier = ">=1.2.0" },
-    { name = "typing-extensions", specifier = ">=4.13.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "commitizen", specifier = ">=4.9.1" },
-    { name = "imblearn", specifier = ">=0.0" },
-    { name = "ipykernel", specifier = ">=6.30.1" },
-    { name = "ipywidgets", specifier = ">=8.1.7" },
-    { name = "jupyterlab" },
-    { name = "pre-commit", specifier = ">=4.3.0" },
-    { name = "pytest", specifier = ">=8.4.1" },
-    { name = "pytest-asyncio", specifier = ">=1.1.0" },
-    { name = "pytest-xdist", specifier = ">=3.8.0" },
-    { name = "torch", specifier = ">=2.0.0" },
+sdist = { url = "https://files.pythonhosted.org/packages/8c/4c/cf1e10b82a903d802aac7dba934c4e125c71563af9e0c8e2f510123d7eae/syft_flwr-0.4.3.tar.gz", hash = "sha256:f63bd7b0a115d76eb3966d51c1939975271a94c7d3af3c33b49802929194f8b9", size = 23498, upload-time = "2025-11-12T09:34:33.701Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/7e/476db44ddc22bb60dc5f96a7423bdc8af4aff2e3b5183a5c050489e487c1/syft_flwr-0.4.3-py3-none-any.whl", hash = "sha256:0dbf850d91a9f6a35f0549ed628a35c8e8ab61ba34988f52348b86f0b551d4db", size = 27916, upload-time = "2025-11-12T09:34:32.854Z" },
 ]
 
 [[package]]

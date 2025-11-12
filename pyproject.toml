@@ -6,7 +6,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
-    "syft-flwr>=0.4.2",
+    "syft-flwr>=0.4.3",
     "numpy>=2.3.3",
     "faiss-cpu>=1.10.0",
     "tqdm>=4.67",
@@ -27,8 +27,8 @@ dev = [
     "pre-commit>=4.3.0",
 ]
 
-[tool.uv.sources]
-syft-flwr = { path = "/Users/khoaguin/Desktop/projects/OpenMined/syft-flwr", editable = true }  # for development
+# [tool.uv.sources]
+# syft-flwr = { path = "../../syft-flwr", editable = true }  # for development
 # syft-flwr = { git = "https://github.com/OpenMined/syft-flwr/", branch = "feat/rds-dashboard-integration" }  # for development
 
 [build-system]

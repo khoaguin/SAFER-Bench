@@ -6,6 +6,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 import faiss
+from loguru import logger
 import numpy as np
 import yaml
 from sentence_transformers import SentenceTransformer
@@ -51,8 +52,8 @@ class Retriever:
             all_files = all_files[:num_chunks]
 
         # Log start of index building
-        print(f"[DO] 🔨 Building FAISS index for dataset: {dataset_name}")
-        print(f"[DO] 📁 Found {len(all_files)} chunk files to process")
+        logger.info(f"[DO] 🔨 Building FAISS index for dataset: {dataset_name}")
+        logger.info(f"[DO] 📁 Found {len(all_files)} chunk files to process")
 
         # Loop through all the .jsonl files, load the id and the content of
         # each document and for each document generate its embeddings
@@ -114,16 +115,16 @@ class Retriever:
         # Save document IDs
         np.save(str(doc_ids_path), np.array(all_doc_ids))
 
-        print(f"[DO] ✅ FAISS index built successfully for {dataset_name}")
+        logger.info(f"[DO] ✅ FAISS index built successfully for {dataset_name}")
 
         return
 
     def query_faiss_index(self, dataset_name, query, knn=8):
         # Check if index exists, build if needed
         if not self.index_exists(dataset_name):
-            print(f"FAISS index not found for {dataset_name}. Building index...")
+            logger.info(f"FAISS index not found for {dataset_name}. Building index...")
             self.build_faiss_index(dataset_name)
-            print(f"FAISS index built successfully for {dataset_name}")
+            logger.info(f"FAISS index built successfully for {dataset_name}")
 
         index_path, doc_ids_path, chunk_dir = _get_dataset_dirs(dataset_name)
 
