@@ -208,7 +208,11 @@ class ResultsReporter:
 
         lines = ["### Data Distribution"]
         for i, do_info in enumerate(self.data_owners, 1):
-            lines.append(f"- DO{i}: {do_info.dataset} ({do_info.data_fraction * 100}%)")
+            dataset_info = do_info.get_dataset_name()
+            if do_info.distribution_strategy != "single":
+                # Show strategy for non-single distributions
+                dataset_info = f"{dataset_info} ({do_info.distribution_strategy})"
+            lines.append(f"- DO{i}: {dataset_info}")
         return "\n".join(lines)
 
     def set_data_owners(self, data_owners: list[DataOwnerInfo]) -> None:

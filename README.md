@@ -98,6 +98,24 @@ medical_llms = {
 - **Hybrid**: Mixed architectures
 
 ##### Data Distributions
+
+SAFER-Bench supports multiple data distribution strategies to simulate realistic federated scenarios:
+
+- **Single Dataset** (default): Each DO maintains one complete dataset
+  - Example: DO1 has all StatPearls, DO2 has all Textbooks
+  - Config: `configs/federation/local_2do.yaml`
+
+- **Hybrid/Mixed Distribution**: Each DO maintains equal portions of multiple datasets
+  - Example: DO1 and DO2 each hold 50% of StatPearls + 50% of Textbooks
+  - Simulates: Collaborative networks with shared data access
+  - Config: `configs/federation/hybrid_2do.yaml`
+
+- **Centralized Baseline**: Single DO with all datasets merged
+  - Example: DO1 holds 100% of StatPearls + 100% of Textbooks
+  - Simulates: Non-federated baseline for comparison
+  - Config: `configs/federation/centralized_1do.yaml`
+
+Additional distribution patterns:
 - **IID**: Uniform data distribution
 - **Non-IID**: Skewed by domain, size, quality
 - **Temporal drift**: Changing data over time

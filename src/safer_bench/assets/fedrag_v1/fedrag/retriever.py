@@ -6,6 +6,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 import faiss
+from loguru import logger
 import numpy as np
 import yaml
 from sentence_transformers import SentenceTransformer
@@ -49,6 +50,10 @@ class Retriever:
         # number of chunks; useful for dev and debug purposes
         if num_chunks:
             all_files = all_files[:num_chunks]
+
+        # Log start of index building
+        logger.info(f"[DO] 🔨 Building FAISS index for dataset: {dataset_name}")
+        logger.info(f"[DO] 📁 Found {len(all_files)} chunk files to process")
 
         # Loop through all the .jsonl files, load the id and the content of
         # each document and for each document generate its embeddings
@@ -110,13 +115,18 @@ class Retriever:
         # Save document IDs
         np.save(str(doc_ids_path), np.array(all_doc_ids))
 
+        logger.info(f"[DO] ✅ FAISS index built successfully for {dataset_name}")
+
         return
 
     def query_faiss_index(self, dataset_name, query, knn=8):
-        index_path, doc_ids_path, chunk_dir = _get_dataset_dirs(dataset_name)
+        # Check if index exists, build if needed
+        if not self.index_exists(dataset_name):
+            logger.info(f"FAISS index not found for {dataset_name}. Building index...")
+            self.build_faiss_index(dataset_name)
+            logger.info(f"FAISS index built successfully for {dataset_name}")
 
-        if not doc_ids_path.exists() or not index_path.exists():
-            raise RuntimeError("FAISS index is not built yet.")
+        index_path, doc_ids_path, chunk_dir = _get_dataset_dirs(dataset_name)
 
         # 1. Load the FAISS index and document IDs
         index = faiss.read_index(str(index_path))
@@ -141,7 +151,21 @@ class Retriever:
         for i, (doc_id, doc_score) in enumerate(zip(retrieved_doc_ids, doc_scores)):
             doc_pref_suf = doc_id.split("_")
             doc_name, snippet_idx = "_".join(doc_pref_suf[:-1]), int(doc_pref_suf[-1])
+
+            # Try exact match first (for single dataset scenarios)
             full_file = chunk_dir / (doc_name + ".jsonl")
+
+            # If not found, search for prefixed version (for centralized/hybrid partitions)
+            # e.g., statpearls_article-31824.jsonl
+            if not full_file.exists():
+                matching_files = list(chunk_dir.glob(f"*_{doc_name}.jsonl"))
+                if matching_files:
+                    full_file = matching_files[0]
+                else:
+                    raise FileNotFoundError(
+                        f"Cannot find chunk file for {doc_name} in {chunk_dir}"
+                    )
+
             loaded_snippet = json.loads(
                 open(full_file).read().strip().split("\n")[snippet_idx]
             )
@@ -163,7 +187,10 @@ class Retriever:
 
 def _get_dataset_dirs(dataset_name: str) -> Tuple[Path, Path, Path]:
     """
-    Return index, doc ids and chunk dirs
+    Return index, doc ids and chunk dirs.
+
+    Note: Index and doc_ids files may not exist yet for partitioned datasets.
+    They will be built on-demand by the Retriever when first queried.
     """
 
     from syft_flwr.utils import get_syftbox_dataset_path, run_syft_flwr
@@ -177,8 +204,7 @@ def _get_dataset_dirs(dataset_name: str) -> Tuple[Path, Path, Path]:
     doc_ids_path = data_dir / "all_doc_ids.npy"
     chunk_dir = data_dir / "chunk"
 
-    assert index_path.exists(), f"Index path {index_path} does not exist"
-    assert doc_ids_path.exists(), f"Doc ids path {doc_ids_path} does not exist"
+    # Only assert chunk directory exists (required for building index)
     assert chunk_dir.exists(), f"Chunk directory {chunk_dir} does not exist"
 
     return index_path, doc_ids_path, chunk_dir

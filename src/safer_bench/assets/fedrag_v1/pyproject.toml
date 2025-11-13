@@ -41,20 +41,7 @@ server-llm-use-gpu = "false"
 partition-id = 0
 num-partitions = 1
 
-[tool.flwr.federations]
-default = "local-simulation"
-
-[tool.flwr.federations.local-simulation.options]
-num-supernodes = 2
-
 [tool.flwr.federations.local-simulation.options.backend.client-resources]
 num-cpus = 2
 num-gpus = 0
 
-[tool.syft_flwr]
-app_name = "ds@openmined.org_fedrag_1757993985"
-datasites = [
-    "do1@openmined.org",
-    "do2@openmined.org",
-]
-aggregator = "ds@openmined.org"
