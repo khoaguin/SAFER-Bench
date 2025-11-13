@@ -1,0 +1,47 @@
+# Hybrid distribution: Each DO gets portions of all datasets
+# DO1, DO2, DO3, DO4 each hold 25% of StatPearls and 25% of Textbooks
+name: hybrid_4do
+num_data_owners: 4
+
+# Email addresses for the federation participants
+aggregator: "ds@saferbench.com"
+
+# Data Owner configurations
+do1:
+  email: "do1@saferbench.com"
+  distribution_strategy: "hybrid"
+  datasets:
+    statpearls: 0.25  # 25% of statpearls
+    textbooks: 0.25   # 25% of textbooks
+
+do2:
+  email: "do2@saferbench.com"
+  distribution_strategy: "hybrid"
+  datasets:
+    statpearls: 0.25  # 25% of statpearls
+    textbooks: 0.25   # 25% of textbooks
+
+do3:
+  email: "do3@saferbench.com"
+  distribution_strategy: "hybrid"
+  datasets:
+    statpearls: 0.25  # 25% of statpearls
+    textbooks: 0.25   # 25% of textbooks
+
+do4:
+  email: "do4@saferbench.com"
+  distribution_strategy: "hybrid"
+  datasets:
+    statpearls: 0.25  # 25% of statpearls
+    textbooks: 0.25   # 25% of textbooks
+
+# Federation approval behavior
+approval:
+  percentage: 0.75  # 75% approval rate
+  mechanism: "static"
+
+# Local setup configuration
+setup:
+  mode: "local"
+  root_dir: "."
+  network_key: "saferbench_network"

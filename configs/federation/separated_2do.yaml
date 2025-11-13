@@ -1,0 +1,31 @@
+# Separated/Partitioned distribution: Each DO maintains one complete dataset
+# DO1 holds all of StatPearls, DO2 holds all of Textbooks
+name: separated_2do
+num_data_owners: 2
+
+# Email addresses for the federation participants
+aggregator: "ds@saferbench.com"
+
+# Data Owner configurations
+do1:
+  email: "do1@saferbench.com"
+  distribution_strategy: "single"
+  datasets:
+    statpearls: 1.0  # 100% of statpearls
+
+do2:
+  email: "do2@saferbench.com"
+  distribution_strategy: "single"
+  datasets:
+    textbooks: 1.0   # 100% of textbooks
+
+# Federation approval behavior
+approval:
+  percentage: 1.0  # 100% approval rate
+  mechanism: "static"
+
+# Local setup configuration
+setup:
+  mode: "local"
+  root_dir: "."
+  network_key: "saferbench_network"
