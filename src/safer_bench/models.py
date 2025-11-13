@@ -92,11 +92,10 @@ class DataOwnerInfo(BaseModel):
                 )
 
         elif self.distribution_strategy == "hybrid":
-            # Hybrid strategy: proportions should sum to ~1.0
-            total = sum(self.datasets.values())
-            if not (0.99 <= total <= 1.01):
+            # Hybrid strategy: each DO gets portions of multiple datasets
+            if len(self.datasets) < 2:
                 raise ValueError(
-                    f"'hybrid' strategy requires proportions to sum to 1.0, got {total:.3f}"
+                    f"'hybrid' strategy requires at least 2 datasets, got {len(self.datasets)}"
                 )
 
         elif self.distribution_strategy == "topic":
