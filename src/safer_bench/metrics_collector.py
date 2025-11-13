@@ -55,7 +55,9 @@ class MetricsCollector:
         #   Answered Questions:  2
         #   Accuracy:            0.0000 (0.00%)
         #   Mean Querying Time:  6.48s
-        dataset_pattern = r"QA Dataset:\s*(\w+)\s*\n.*?Total Questions:\s+(\d+)\s*\n.*?Answered Questions:\s+(\d+)\s*\n.*?Accuracy:\s+([\d.]+).*?\n.*?Mean Querying Time:\s+([\d.nan]+)s?"
+        #   Mean Comm. Cost:     0.1234 MB/query
+        #   Total Comm. Cost:    12.34 MB
+        dataset_pattern = r"QA Dataset:\s*(\w+)\s*\n.*?Total Questions:\s+(\d+)\s*\n.*?Answered Questions:\s+(\d+)\s*\n.*?Accuracy:\s+([\d.]+).*?\n.*?Mean Querying Time:\s+([\d.nan]+)s?\s*\n.*?Mean Comm\. Cost:\s+([\d.nan]+)\s*MB/query\s*\n.*?Total Comm\. Cost:\s+([\d.nan]+)\s*MB"
 
         matches = re.finditer(dataset_pattern, stdout, re.MULTILINE | re.DOTALL)
 
@@ -65,15 +67,25 @@ class MetricsCollector:
             answered_questions = int(match.group(3))
             accuracy = float(match.group(4))
             mean_time_str = match.group(5)
+            mean_comm_cost_str = match.group(6)
+            total_comm_cost_str = match.group(7)
 
             # Handle 'nan' values
             mean_time = None if mean_time_str == "nan" else float(mean_time_str)
+            mean_comm_cost = (
+                None if mean_comm_cost_str == "nan" else float(mean_comm_cost_str)
+            )
+            total_comm_cost = (
+                None if total_comm_cost_str == "nan" else float(total_comm_cost_str)
+            )
 
             metrics[dataset_name] = {
                 "total_questions": total_questions,
                 "answered_questions": answered_questions,
                 "accuracy": accuracy,
                 "mean_query_time": mean_time,
+                "mean_comm_cost_mb": mean_comm_cost,
+                "total_comm_cost_mb": total_comm_cost,
             }
 
         return metrics
@@ -113,11 +125,30 @@ class MetricsCollector:
         ]
         mean_query_time = sum(query_times) / len(query_times) if query_times else None
 
+        # Calculate communication cost metrics (excluding None/nan values)
+        mean_comm_costs = [
+            m["mean_comm_cost_mb"]
+            for m in per_dataset_metrics.values()
+            if m["mean_comm_cost_mb"] is not None
+        ]
+        mean_comm_cost_mb = (
+            sum(mean_comm_costs) / len(mean_comm_costs) if mean_comm_costs else None
+        )
+
+        total_comm_costs = [
+            m["total_comm_cost_mb"]
+            for m in per_dataset_metrics.values()
+            if m["total_comm_cost_mb"] is not None
+        ]
+        total_comm_cost_mb = sum(total_comm_costs) if total_comm_costs else None
+
         return {
             "total_questions": total_questions,
             "total_answered": total_answered,
             "weighted_accuracy": weighted_accuracy,
             "mean_query_time": mean_query_time,
+            "mean_comm_cost_mb": mean_comm_cost_mb,
+            "total_comm_cost_mb": total_comm_cost_mb,
         }
 
     def parse_accuracy_breakdown(self, stdout: str) -> Dict[str, Dict]:

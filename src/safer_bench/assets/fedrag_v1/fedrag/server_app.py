@@ -6,6 +6,7 @@ from collections import defaultdict
 from itertools import cycle
 from pathlib import Path
 from time import sleep
+import sys
 
 import numpy as np
 from flwr.common import ConfigRecord, Context, Message, MessageType, RecordDict
@@ -102,6 +103,9 @@ def submit_question(
         )
         messages.append(message)
 
+    # Calculate size of outgoing messages (query)
+    query_size_bytes = sum(sys.getsizeof(str(msg)) for msg in messages)
+
     # Send messages and wait for all results
     replies = grid.send_and_receive(messages)
     print(f"✓ Received {len(replies)}/{len(messages)} results")
@@ -112,7 +116,15 @@ def submit_question(
             documents.extend(reply.content["docs_n_scores"]["documents"])
             scores.extend(reply.content["docs_n_scores"]["scores"])
 
-    return documents, scores
+    # Calculate size of incoming messages (retrieved documents)
+    response_size_bytes = sum(
+        sys.getsizeof(str(doc)) for doc in documents
+    ) + sys.getsizeof(str(scores))
+
+    # Total communication size in MB
+    total_comm_size_mb = (query_size_bytes + response_size_bytes) / (1024 * 1024)
+
+    return documents, scores, total_comm_size_mb
 
 
 app = ServerApp()
@@ -151,6 +163,7 @@ def main(grid: Grid, context: Context) -> None:
         defaultdict(list),
         defaultdict(int),
     )
+    communication_sizes = defaultdict(list)  # Track communication size (MB) per dataset
 
     # Accuracy breakdown tracking
     option_correct = defaultdict(lambda: defaultdict(int))  # [dataset][option] = count
@@ -174,7 +187,7 @@ def main(grid: Grid, context: Context) -> None:
                 break
             question = q["question"]
             q_st = time.time()
-            docs, scores = submit_question(
+            docs, scores, comm_size_mb = submit_question(
                 grid, question, q_id, knn, node_ids, corpus_names_iter
             )
             merged_docs = merge_documents(docs, scores, knn, k_rrf)
@@ -193,6 +206,7 @@ def main(grid: Grid, context: Context) -> None:
                 q_et = time.time()
                 q_time = q_et - q_st  # elapsed time in seconds
                 question_times[dataset_name].append(q_time)
+                communication_sizes[dataset_name].append(comm_size_mb)
 
                 # Track accuracy breakdown metrics
                 option_total[dataset_name][answer] += 1
@@ -213,6 +227,9 @@ def main(grid: Grid, context: Context) -> None:
     print(
         "  (4) Mean Querying Time - Average wall-clock time per query (submission → final prediction)"
     )
+    print(
+        "  (5) Communication Cost - Average data exchanged per query (query + response)"
+    )
     print("=" * 80 + "\n")
     for dataset_name in qa_datasets:
         exp_ans = expected_answers[dataset_name]
@@ -223,6 +240,8 @@ def main(grid: Grid, context: Context) -> None:
         if exp_ans and pred_ans:  # make sure that both collections have values inside
             accuracy = accuracy_score(exp_ans, pred_ans)
         elapsed_time = np.mean(question_times[dataset_name])
+        mean_comm_size = np.mean(communication_sizes[dataset_name])
+        total_comm_size = np.sum(communication_sizes[dataset_name])
 
         # Print dataset results with nice formatting
         print(f"\n{'─'*60}")
@@ -232,6 +251,8 @@ def main(grid: Grid, context: Context) -> None:
         print(f"  Answered Questions:  {len(pred_ans)}")
         print(f"  Accuracy:            {accuracy:.4f} ({accuracy*100:.2f}%)")
         print(f"  Mean Querying Time:  {elapsed_time:.2f}s")
+        print(f"  Mean Comm. Cost:     {mean_comm_size:.4f} MB/query")
+        print(f"  Total Comm. Cost:    {total_comm_size:.2f} MB")
         print(f"{'─'*60}")
 
         # Print accuracy breakdown

@@ -110,10 +110,22 @@ class ResultsReporter:
         mean_time_str = (
             f"{overall.mean_query_time:.2f}s" if overall.mean_query_time else "N/A"
         )
+        mean_comm_str = (
+            f"{overall.mean_comm_cost_mb:.4f} MB/query"
+            if overall.mean_comm_cost_mb
+            else "N/A"
+        )
+        total_comm_str = (
+            f"{overall.total_comm_cost_mb:.2f} MB"
+            if overall.total_comm_cost_mb
+            else "N/A"
+        )
         return f"""### Overall Results
 - **Weighted Accuracy**: {overall.weighted_accuracy:.2%}
 - **Total Questions**: {overall.total_answered}/{overall.total_questions} answered
 - **Mean Query Time**: {mean_time_str}
+- **Mean Communication Cost**: {mean_comm_str}
+- **Total Communication Cost**: {total_comm_str}
 - **Total Runtime**: {metrics.benchmark_metadata.duration_seconds:.2f}s
 """
 
@@ -129,13 +141,23 @@ class ResultsReporter:
             mean_time = dataset_metrics.mean_query_time
             mean_time_str = f"{mean_time:.2f}s" if mean_time is not None else "N/A"
 
+            # Communication cost metrics
+            mean_comm = dataset_metrics.mean_comm_cost_mb
+            mean_comm_str = (
+                f"{mean_comm:.4f} MB/query" if mean_comm is not None else "N/A"
+            )
+            total_comm = dataset_metrics.total_comm_cost_mb
+            total_comm_str = f"{total_comm:.2f} MB" if total_comm is not None else "N/A"
+
             # Basic stats
             sections.append(f"#### {dataset_name}")
             sections.append(
                 f"- **Accuracy**: {dataset_metrics.accuracy:.2%} "
                 f"({dataset_metrics.answered_questions}/{dataset_metrics.total_questions} questions)"
             )
-            sections.append(f"- **Mean Query Time**: {mean_time_str}\n")
+            sections.append(f"- **Mean Query Time**: {mean_time_str}")
+            sections.append(f"- **Mean Communication Cost**: {mean_comm_str}")
+            sections.append(f"- **Total Communication Cost**: {total_comm_str}\n")
 
             # Add detailed breakdown if available
             if accuracy_breakdown and dataset_name in accuracy_breakdown:

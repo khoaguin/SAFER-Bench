@@ -22,22 +22,22 @@ _nc := '\033[0m'
 # ---------------------------------------------------------------------------------------------------------------------
 
 # Development: quick run with data subsets (fast iteration)
-run-dry federation="local_2do":
+run-dry federation="separated_2do":
     @echo -e "{{_cyan}}🚀 Running SAFER-Bench in SUBSET mode (fast) with {{federation}}...{{_nc}}"
     uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 federation={{federation}}
 
 # Production: full benchmark with complete datasets
-run federation="local_2do":
+run federation="separated_2do":
     @echo -e "{{_green}}🔬 Running SAFER-Bench in FULL mode (complete) with {{federation}}...{{_nc}}"
     uv run python src/safer_bench/main.py dataset.use_subset=false federation={{federation}}
 
 # Development: run with inspection (keep directories for debugging)
-run-dry-inspect federation="local_2do":
+run-dry-inspect federation="separated_2do":
     @echo -e "{{_yellow}}🔍 Running SAFER-Bench with directories kept for inspection ({{federation}})...{{_nc}}"
     uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 runtime.clean=false federation={{federation}}
 
 # Production: run with inspection (keep directories for debugging)
-run-inspect federation="local_2do":
+run-inspect federation="separated_2do":
     @echo -e "{{_yellow}}🔍 Running SAFER-Bench FULL mode with directories kept for inspection ({{federation}})...{{_nc}}"
     uv run python src/safer_bench/main.py dataset.use_subset=false runtime.clean=false federation={{federation}}
 
@@ -46,7 +46,7 @@ run-inspect federation="local_2do":
 #     @echo -e "{{_cyan}}🔍 Running parameter sweep in SUBSET mode...{{_nc}}"
 #     uv run python src/safer_bench/main.py --multirun \
 #         dataset.use_subset=true \
-#         federation=local_2do,local_3do \
+#         federation=separated_2do,hybrid_3do \
 #         federation.approval.percentage=0.5,1.0
 
 # # Production sweep: full parameter exploration (long-running)
@@ -54,7 +54,7 @@ run-inspect federation="local_2do":
 #     @echo -e "{{_green}}🔍 Running parameter sweep in FULL mode...{{_nc}}"
 #     uv run python src/safer_bench/main.py --multirun \
 #         dataset.use_subset=false \
-#         federation=local_2do,local_3do,local_4do \
+#         federation=separated_2do,hybrid_3do,hybrid_4do \
 #         federation.approval.percentage=0.25,0.5,0.75,1.0
 
 # Show current configuration

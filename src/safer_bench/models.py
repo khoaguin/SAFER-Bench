@@ -261,6 +261,12 @@ class DatasetMetrics(BaseModel):
     mean_query_time: Optional[float] = Field(
         None, description="Mean query time in seconds"
     )
+    mean_comm_cost_mb: Optional[float] = Field(
+        None, description="Mean communication cost in MB per query"
+    )
+    total_comm_cost_mb: Optional[float] = Field(
+        None, description="Total communication cost in MB"
+    )
 
 
 class PerOptionAccuracy(BaseModel):
@@ -312,6 +318,12 @@ class OverallMetrics(BaseModel):
     weighted_accuracy: Percentage = Field(..., description="Weighted accuracy")
     mean_query_time: Optional[float] = Field(
         None, description="Mean query time in seconds"
+    )
+    mean_comm_cost_mb: Optional[float] = Field(
+        None, description="Mean communication cost in MB per query across all datasets"
+    )
+    total_comm_cost_mb: Optional[float] = Field(
+        None, description="Total communication cost in MB across all datasets"
     )
 
 
