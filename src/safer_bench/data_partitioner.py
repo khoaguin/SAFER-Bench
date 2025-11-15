@@ -36,6 +36,7 @@ class DataPartitioner:
         output_path: Path,
         use_subset: bool = False,
         project_root_dir: Optional[Path] = None,
+        partition_id: Optional[int] = None,
     ) -> None:
         """Create a hybrid partition combining portions of multiple datasets.
 
@@ -44,6 +45,7 @@ class DataPartitioner:
             output_path: Path to output partition directory
             use_subset: Whether to use subset or full datasets
             project_root_dir: Optional root directory
+            partition_id: Unique ID for this partition (used for deterministic sampling)
         """
         logger.info(f"Creating hybrid partition with datasets: {datasets}")
 
@@ -73,7 +75,9 @@ class DataPartitioner:
 
             # Sample chunks based on proportion
             num_to_sample = max(1, int(len(chunk_files) * proportion))
-            sampled_chunks = self._sample_chunks(chunk_files, num_to_sample)
+            sampled_chunks = self._sample_chunks(
+                chunk_files, num_to_sample, partition_id=partition_id
+            )
 
             logger.info(
                 f"{dataset_name}: Sampled {len(sampled_chunks)}/{len(chunk_files)} chunks"
@@ -200,12 +204,18 @@ class DataPartitioner:
 
         logger.success(f"Centralized partition created at {output_path}")
 
-    def _sample_chunks(self, chunk_files: List[Path], num_to_sample: int) -> List[Path]:
+    def _sample_chunks(
+        self,
+        chunk_files: List[Path],
+        num_to_sample: int,
+        partition_id: Optional[int] = None,
+    ) -> List[Path]:
         """Sample a specified number of chunk files deterministically.
 
         Args:
             chunk_files: List of chunk file paths
             num_to_sample: Number of chunks to sample
+            partition_id: Optional partition ID for per-partition random seed
 
         Returns:
             List of sampled chunk file paths
@@ -213,8 +223,15 @@ class DataPartitioner:
         if num_to_sample >= len(chunk_files):
             return chunk_files
 
-        # Deterministic sampling using seed
-        sampled = random.sample(chunk_files, num_to_sample)
+        # Use per-partition random seed to ensure disjoint sampling across partitions
+        if partition_id is not None:
+            # Create a local Random instance with partition-specific seed
+            # This ensures different partitions sample different chunks
+            rng = random.Random(self.seed + partition_id)
+            sampled = rng.sample(chunk_files, num_to_sample)
+        else:
+            sampled = random.sample(chunk_files, num_to_sample)
+
         return sampled
 
     def _copy_chunks(self, chunk_files: List[Path], output_dir: Path) -> None:

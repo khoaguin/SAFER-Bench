@@ -68,6 +68,7 @@ class ResultsReporter:
         # Build summary sections
         header = self._format_header(benchmark_id)
         config_section = self._format_configuration()
+        privacy_section = self._format_privacy_metrics(metrics)
         overall_section = self._format_overall_results(overall, metrics)
         dataset_section = self._format_per_dataset_results(
             per_dataset, accuracy_breakdown
@@ -79,6 +80,7 @@ class ResultsReporter:
             [
                 header,
                 config_section,
+                privacy_section,
                 overall_section,
                 dataset_section,
                 execution_section,
@@ -95,6 +97,7 @@ class ResultsReporter:
 
     def _format_configuration(self) -> str:
         """Format the configuration section."""
+        privacy_str = f"{self.cfg.privacy.type}" if self.cfg.privacy.enabled else "None"
         return f"""### Configuration
 - Federation: {self.cfg.federation.name}
 - Data Owners: {self.cfg.federation.num_data_owners}
@@ -102,7 +105,31 @@ class ResultsReporter:
 - LLM: {self.cfg.llm.model}
 - Merger: {self.cfg.merger.type}
 - Dataset Mode: {"Subset" if self.cfg.dataset.use_subset else "Full"}
+- Privacy: {privacy_str}
 - Approval Rate: {self.cfg.federation.approval.percentage * 100}%
+"""
+
+    def _format_privacy_metrics(self, metrics: BenchmarkMetrics) -> str:
+        """Format privacy metrics section."""
+        privacy_enabled = self.cfg.privacy.enabled
+        privacy_type = self.cfg.privacy.type if privacy_enabled else "none"
+
+        if not privacy_enabled or privacy_type == "none":
+            return """### Privacy Metrics
+- **Privacy Enabled**: No
+- **Privacy Mechanism**: None
+- **Approval Rate**: {:.1%}
+- **Accuracy Drop**: N/A (no privacy applied)
+""".format(self.cfg.federation.approval.percentage)
+
+        # When privacy is enabled, show detailed metrics
+        # TODO: Calculate actual privacy metrics when privacy mechanisms are implemented
+        return f"""### Privacy Metrics
+- **Privacy Enabled**: Yes
+- **Privacy Mechanism**: {privacy_type}
+- **Approval Rate**: {self.cfg.federation.approval.percentage:.1%}
+- **Accuracy Drop**: N/A (to be calculated)
+- **Privacy Parameters**: _See privacy configuration_
 """
 
     def _format_overall_results(self, overall, metrics: BenchmarkMetrics) -> str:

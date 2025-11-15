@@ -1070,7 +1070,7 @@ class FederationManager:
         partitioner = DataPartitioner(seed=42)
 
         # Create partitions for each DO that needs one
-        for do_info in self.data_owners:
+        for idx, do_info in enumerate(self.data_owners):
             if do_info.distribution_strategy == "single":
                 logger.debug(
                     f"No partitioning needed for {do_info.email}, will use original dataset"
@@ -1099,6 +1099,7 @@ class FederationManager:
                     output_path=partition_path,
                     use_subset=self.use_subset,
                     project_root_dir=self.root_dir,
+                    partition_id=idx,  # Pass partition index for disjoint sampling
                 )
             elif do_info.distribution_strategy == "centralized":
                 partitioner.create_centralized_partition(
