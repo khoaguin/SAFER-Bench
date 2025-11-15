@@ -573,15 +573,16 @@ class FederationManager:
                     / dataset_name
                 )
 
-                # Get the partition source path
-                partition_path = (
+                # Get the partition base path
+                partition_base_path = (
                     self.root_dir
                     / "datasets"
                     / ("subsets" if self.use_subset else "full")
                     / "partitions"
                     / dataset_name
-                    / "private"
                 )
+                partition_private_path = partition_base_path / "private"
+                partition_mock_path = partition_base_path / "mock"
 
                 # Check if indexes exist in runtime location
                 index_file = syftbox_dataset_path / "faiss.index"
@@ -601,19 +602,30 @@ class FederationManager:
                     )
                     continue
 
-                # Ensure partition directory exists
-                if not partition_path.exists():
+                # Ensure partition directories exist
+                if not partition_private_path.exists():
                     logger.warning(
-                        f"Partition directory not found: {partition_path}, skipping index copy"
+                        f"Partition directory not found: {partition_private_path}, skipping index copy"
                     )
                     continue
 
-                # Copy index files
-                shutil.copy2(index_file, partition_path / "faiss.index")
-                shutil.copy2(doc_ids_file, partition_path / "all_doc_ids.npy")
+                # Copy index files to private directory
+                shutil.copy2(index_file, partition_private_path / "faiss.index")
+                shutil.copy2(doc_ids_file, partition_private_path / "all_doc_ids.npy")
+
+                # QUICK FIX: Also copy to mock directory if it exists (to keep extensions in sync)
+                # Syft RDS requires private and mock directories to have matching file extensions.
+                # Without this, dataset uploads fail with: "Directories contain different file extensions"
+                # The mock directory is used by Syft RDS for validation/testing purposes.
+                if partition_mock_path.exists():
+                    shutil.copy2(index_file, partition_mock_path / "faiss.index")
+                    shutil.copy2(doc_ids_file, partition_mock_path / "all_doc_ids.npy")
+                    logger.debug(
+                        f"Copied indexes to mock directory: {partition_mock_path}"
+                    )
 
                 logger.success(
-                    f"✅ Copied FAISS indexes for {dataset_name} to {partition_path}"
+                    f"✅ Copied FAISS indexes for {dataset_name} to {partition_private_path}"
                 )
 
             except Exception as e:
