@@ -30,7 +30,7 @@ do3:
 
 # Federation approval behavior
 approval:
-  percentage: 0.5  # 50% approval rate
+  percentage: 1.0
   mechanism: "static"
 
 # Local setup configuration

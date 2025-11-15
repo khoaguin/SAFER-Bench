@@ -73,5 +73,5 @@ clean:
 
 clean-output:
     @echo -e "{{_yellow}}🧹 Cleaning up output directories...{{_nc}}"
-    rm -rf outputs/
+    rm -rf outputs/ results/
     @echo -e "{{_green}}✅ Output directories cleaned{{_nc}}"

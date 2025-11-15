@@ -75,6 +75,9 @@ class FederationManager:
         )
 
         # Parse federation configuration
+        self.federation_name: str = (
+            cfg.federation.name
+        )  # e.g., "hybrid_2do", "centralized_1do"
         self.aggregator_email: str = cfg.federation.aggregator
         self.data_owners: List[DataOwnerInfo] = self._parse_data_owners()
         self.use_subset: bool = cfg.dataset.use_subset
@@ -573,13 +576,15 @@ class FederationManager:
                     / dataset_name
                 )
 
-                # Get the partition base path
+                # Get the partition base path: partitions/federation_name/do_email/
+                do_email_prefix = do_email.split("@")[0]
                 partition_base_path = (
                     self.root_dir
                     / "datasets"
                     / ("subsets" if self.use_subset else "full")
                     / "partitions"
-                    / dataset_name
+                    / self.federation_name
+                    / do_email_prefix
                 )
                 partition_private_path = partition_base_path / "private"
                 partition_mock_path = partition_base_path / "mock"
@@ -1077,11 +1082,12 @@ class FederationManager:
             partitions_base = self.root_dir / "datasets" / mode_dir / "partitions"
             partitions_base.mkdir(parents=True, exist_ok=True)
 
-            # Create unique partition name
-            partition_name = (
-                f"{do_info.email.split('@')[0]}_{do_info.distribution_strategy}"
+            # Create unique partition name: federation_name/do_email
+            # This ensures each federation config has separate partitions
+            do_email_prefix = do_info.email.split("@")[0]
+            partition_path = (
+                partitions_base / self.federation_name / do_email_prefix / "private"
             )
-            partition_path = partitions_base / partition_name / "private"
 
             logger.info(
                 f"Creating {do_info.distribution_strategy} partition for {do_info.email}"
@@ -1103,6 +1109,8 @@ class FederationManager:
                 )
 
             # Store partition name in DO info for later use
+            # Format: federation_name/do_email (e.g., "hybrid_2do/do1")
+            partition_name = f"{self.federation_name}/{do_email_prefix}"
             do_info.partition_name = partition_name
             logger.success(f"✅ Partition created: {partition_name}")
 
