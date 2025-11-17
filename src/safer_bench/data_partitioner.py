@@ -37,6 +37,7 @@ class DataPartitioner:
         use_subset: bool = False,
         project_root_dir: Optional[Path] = None,
         partition_id: Optional[int] = None,
+        total_partitions: Optional[int] = None,
     ) -> None:
         """Create a hybrid partition combining portions of multiple datasets.
 
@@ -45,7 +46,8 @@ class DataPartitioner:
             output_path: Path to output partition directory
             use_subset: Whether to use subset or full datasets
             project_root_dir: Optional root directory
-            partition_id: Unique ID for this partition (used for deterministic sampling)
+            partition_id: Unique ID for this partition (used for deterministic slicing)
+            total_partitions: Total number of partitions (used for deterministic slicing)
         """
         logger.info(f"Creating hybrid partition with datasets: {datasets}")
 
@@ -76,7 +78,10 @@ class DataPartitioner:
             # Sample chunks based on proportion
             num_to_sample = max(1, int(len(chunk_files) * proportion))
             sampled_chunks = self._sample_chunks(
-                chunk_files, num_to_sample, partition_id=partition_id
+                chunk_files,
+                num_to_sample,
+                partition_id=partition_id,
+                total_partitions=total_partitions,
             )
 
             logger.info(
@@ -209,13 +214,19 @@ class DataPartitioner:
         chunk_files: List[Path],
         num_to_sample: int,
         partition_id: Optional[int] = None,
+        total_partitions: Optional[int] = None,
     ) -> List[Path]:
-        """Sample a specified number of chunk files deterministically.
+        """Sample chunk files using deterministic slice-based partitioning.
+
+        When partition_id and total_partitions are provided, chunks are divided
+        into equal slices and each partition gets its designated slice. This
+        ensures completely disjoint partitions with 0% overlap.
 
         Args:
-            chunk_files: List of chunk file paths
-            num_to_sample: Number of chunks to sample
-            partition_id: Optional partition ID for per-partition random seed
+            chunk_files: List of chunk file paths (should be sorted for consistency)
+            num_to_sample: Number of chunks to sample (used for validation)
+            partition_id: Partition index (0-based)
+            total_partitions: Total number of partitions
 
         Returns:
             List of sampled chunk file paths
@@ -223,10 +234,50 @@ class DataPartitioner:
         if num_to_sample >= len(chunk_files):
             return chunk_files
 
-        # Use per-partition random seed to ensure disjoint sampling across partitions
+        # Use deterministic slice-based partitioning when both params provided
+        if partition_id is not None and total_partitions is not None:
+            if partition_id >= total_partitions:
+                raise ValueError(
+                    f"partition_id ({partition_id}) must be < total_partitions ({total_partitions})"
+                )
+
+            total_chunks = len(chunk_files)
+            base_size = total_chunks // total_partitions
+            remainder = total_chunks % total_partitions
+
+            # Distribute remainder chunks among first partitions
+            # e.g., 100 chunks / 3 partitions = 34, 33, 33
+            if partition_id < remainder:
+                start_idx = partition_id * (base_size + 1)
+                end_idx = start_idx + base_size + 1
+            else:
+                start_idx = (
+                    remainder * (base_size + 1) + (partition_id - remainder) * base_size
+                )
+                end_idx = start_idx + base_size
+
+            sampled = chunk_files[start_idx:end_idx]
+
+            # Validate sampled count matches expected
+            if len(sampled) != num_to_sample:
+                logger.warning(
+                    f"Deterministic sampling: expected {num_to_sample} chunks, "
+                    f"got {len(sampled)} for partition {partition_id}/{total_partitions}"
+                )
+
+            logger.debug(
+                f"Partition {partition_id}/{total_partitions}: sampled chunks [{start_idx}:{end_idx}] "
+                f"({len(sampled)} chunks)"
+            )
+
+            return sampled
+
+        # Fallback: use random sampling (for backward compatibility)
+        logger.warning(
+            "Using random sampling - partition_id or total_partitions not provided. "
+            "This may cause overlapping chunks between partitions."
+        )
         if partition_id is not None:
-            # Create a local Random instance with partition-specific seed
-            # This ensures different partitions sample different chunks
             rng = random.Random(self.seed + partition_id)
             sampled = rng.sample(chunk_files, num_to_sample)
         else:

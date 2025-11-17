@@ -1099,7 +1099,10 @@ class FederationManager:
                     output_path=partition_path,
                     use_subset=self.use_subset,
                     project_root_dir=self.root_dir,
-                    partition_id=idx,  # Pass partition index for disjoint sampling
+                    partition_id=idx,  # Pass partition index for deterministic slicing
+                    total_partitions=len(
+                        self.data_owners
+                    ),  # Total number of DOs for slicing
                 )
             elif do_info.distribution_strategy == "centralized":
                 partitioner.create_centralized_partition(
