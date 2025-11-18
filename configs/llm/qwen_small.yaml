@@ -1,6 +1,0 @@
-# Qwen 0.5B configuration (kept as baseline to demonstrate small model limitations)
-model: "Qwen/Qwen2.5-0.5B"
-device: "auto"  # Automatically use CUDA/MPS/CPU based on availability
-max_new_tokens: 50
-temperature: 0.7
-category: "general"

@@ -22,24 +22,70 @@ _nc := '\033[0m'
 # ---------------------------------------------------------------------------------------------------------------------
 
 # Development: quick run with data subsets (fast iteration)
-run-dry federation="separated_2do":
-    @echo -e "{{_cyan}}🚀 Running SAFER-Bench in SUBSET mode (fast) with {{federation}}...{{_nc}}"
-    uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 federation={{federation}}
+run-dry federation="separated_2do" llm="smollm_1.7b" *args="":
+    @echo -e "{{_cyan}}🚀 Running SAFER-Bench in SUBSET mode (fast) with {{federation}} and {{llm}}...{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 federation={{federation}} llm={{llm}} {{args}}
 
 # Production: full benchmark with complete datasets
-run federation="separated_2do":
-    @echo -e "{{_green}}🔬 Running SAFER-Bench in FULL mode (complete) with {{federation}}...{{_nc}}"
-    uv run python src/safer_bench/main.py dataset.use_subset=false federation={{federation}}
+run federation="separated_2do" llm="smollm_1.7b" *args="":
+    @echo -e "{{_green}}🔬 Running SAFER-Bench in FULL mode (complete) with {{federation}} and {{llm}}...{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=false federation={{federation}} llm={{llm}} {{args}}
 
 # Development: run with inspection (keep directories for debugging)
-run-dry-inspect federation="separated_2do":
-    @echo -e "{{_yellow}}🔍 Running SAFER-Bench with directories kept for inspection ({{federation}})...{{_nc}}"
-    uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 runtime.clean=false federation={{federation}}
+run-dry-inspect federation="separated_2do" llm="smollm_1.7b" *args="":
+    @echo -e "{{_yellow}}🔍 Running SAFER-Bench with directories kept for inspection ({{federation}}, {{llm}})...{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 runtime.clean=false federation={{federation}} llm={{llm}} {{args}}
 
 # Production: run with inspection (keep directories for debugging)
-run-inspect federation="separated_2do":
-    @echo -e "{{_yellow}}🔍 Running SAFER-Bench FULL mode with directories kept for inspection ({{federation}})...{{_nc}}"
-    uv run python src/safer_bench/main.py dataset.use_subset=false runtime.clean=false federation={{federation}}
+run-inspect federation="separated_2do" llm="smollm_1.7b" *args="":
+    @echo -e "{{_yellow}}🔍 Running SAFER-Bench FULL mode with directories kept for inspection ({{federation}}, {{llm}})...{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=false runtime.clean=false federation={{federation}} llm={{llm}} {{args}}
+
+# Run all federation configs sequentially (SUBSET mode - fast)
+run-all-federations-dry llm="smollm_1.7b" privacy="none":
+    @echo -e "{{_cyan}}🔄 Running all federations in SUBSET mode with LLM={{llm}}, privacy={{privacy}}{{_nc}}"
+    @echo -e "{{_cyan}}Running: separated_2do{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 federation=separated_2do llm={{llm}} privacy={{privacy}}
+    @echo -e "{{_yellow}}⏳ Waiting 5 seconds before next run...{{_nc}}"
+    @sleep 5
+    @echo -e "{{_cyan}}Running: hybrid_2do{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 federation=hybrid_2do llm={{llm}} privacy={{privacy}}
+    @echo -e "{{_yellow}}⏳ Waiting 5 seconds before next run...{{_nc}}"
+    @sleep 5
+    @echo -e "{{_cyan}}Running: centralized_1do{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 federation=centralized_1do llm={{llm}} privacy={{privacy}}
+    @echo -e "{{_yellow}}⏳ Waiting 5 seconds before next run...{{_nc}}"
+    @sleep 5
+    @echo -e "{{_cyan}}Running: hybrid_3do{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 federation=hybrid_3do llm={{llm}} privacy={{privacy}}
+    @echo -e "{{_yellow}}⏳ Waiting 5 seconds before next run...{{_nc}}"
+    @sleep 5
+    @echo -e "{{_cyan}}Running: hybrid_4do{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 federation=hybrid_4do llm={{llm}} privacy={{privacy}}
+    @echo -e "{{_green}}✅ All federation configs completed!{{_nc}}"
+
+# Run all federation configs sequentially (FULL mode - long-running)
+run-all-federations llm="smollm_1.7b" privacy="none":
+    @echo -e "{{_green}}🔄 Running all federations in FULL mode with LLM={{llm}}, privacy={{privacy}}{{_nc}}"
+    @echo -e "{{_green}}Running: separated_2do{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=false federation=separated_2do llm={{llm}} privacy={{privacy}}
+    @echo -e "{{_yellow}}⏳ Waiting 5 seconds before next run...{{_nc}}"
+    @sleep 5
+    @echo -e "{{_green}}Running: hybrid_2do{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=false federation=hybrid_2do llm={{llm}} privacy={{privacy}}
+    @echo -e "{{_yellow}}⏳ Waiting 5 seconds before next run...{{_nc}}"
+    @sleep 5
+    @echo -e "{{_green}}Running: centralized_1do{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=false federation=centralized_1do llm={{llm}} privacy={{privacy}}
+    @echo -e "{{_yellow}}⏳ Waiting 5 seconds before next run...{{_nc}}"
+    @sleep 5
+    @echo -e "{{_green}}Running: hybrid_3do{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=false federation=hybrid_3do llm={{llm}} privacy={{privacy}}
+    @echo -e "{{_yellow}}⏳ Waiting 5 seconds before next run...{{_nc}}"
+    @sleep 5
+    @echo -e "{{_green}}Running: hybrid_4do{{_nc}}"
+    uv run python src/safer_bench/main.py dataset.use_subset=false federation=hybrid_4do llm={{llm}} privacy={{privacy}}
+    @echo -e "{{_green}}✅ All federation configs completed!{{_nc}}"
 
 # # Development sweep: quick parameter exploration with subsets
 # sweep-dry:
@@ -73,5 +119,5 @@ clean:
 
 clean-output:
     @echo -e "{{_yellow}}🧹 Cleaning up output directories...{{_nc}}"
-    rm -rf outputs/* results/*
+    rm -rf outputs/*
     @echo -e "{{_green}}✅ Output directories cleaned{{_nc}}"
