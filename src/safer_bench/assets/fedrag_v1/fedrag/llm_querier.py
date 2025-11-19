@@ -20,7 +20,9 @@ class LLMQuerier:
             self.device = torch.device("cpu")
 
         logger.info(f"Using device: {self.device}")
+        logger.info(f"Loading LLM model: {model_name}")
         self.model = AutoModelForCausalLM.from_pretrained(model_name).to(self.device)
+        logger.info(f"Successfully loaded model: {self.model.config._name_or_path}")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         # set pad token if empty

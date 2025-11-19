@@ -225,15 +225,13 @@ class FedRAGProjectAdapter:
         if "model" in llm_config:
             # Map from config model name to HuggingFace path
             llm_model_map = {
-                "qwen_small": "Qwen/Qwen2.5-0.5B",  # Small baseline (500M params)
                 "smollm_1.7b": "HuggingFaceTB/SmolLM2-1.7B-Instruct",
                 "biomistral_7b": "BioMistral/BioMistral-7B",
-                "llama_1b": "meta-llama/Llama-3.2-1B-Instruct",
             }
             model_name = llm_config.get("model", "smollm_1.7b")
             app_config["server-llm-hfpath"] = llm_model_map.get(
                 model_name,
-                llm_config.get("model_path", "HuggingFaceTB/SmolLM2-1.7B-Instruct"),
+                model_name,  # Use model_name directly if not found in map
             )
 
         app_config["server-llm-use-gpu"] = str(llm_config.get("use_gpu", False)).lower()

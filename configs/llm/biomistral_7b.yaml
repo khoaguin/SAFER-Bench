@@ -1,4 +1,4 @@
-# BioMistral 7B Q4 quantized configuration
+# BioMistral 7B Q4_K_M quantized configuration
 model: "BioMistral/BioMistral-7B-Q4_K_M"
 device: "auto"  # Automatically use CUDA/MPS/CPU based on availability
 max_new_tokens: 50
