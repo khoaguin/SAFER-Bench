@@ -58,6 +58,10 @@ class LLMQuerier:
 
         generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         generated_answer = self.__extract_answer(generated_text, prompt)
+        logger.info(
+            f"Generated text: {generated_text[len(prompt):].strip()[:200]}..."
+        )  # Log first 200 chars
+        logger.info(f"Extracted answer: {generated_answer}")
         return prompt, generated_answer
 
     @classmethod
@@ -90,8 +94,15 @@ class LLMQuerier:
         # Extract only the new generated text
         response = generated_text[len(original_prompt) :].strip()
 
-        # Find first occurrence of A-D (case-insensitive)
+        # First try to find letter options A-D (case-insensitive)
         option = re.search(r"\b([A-Da-d])\b", response)
         if option:
             return option.group(1).upper()
+
+        # If not found, try to find number options 1-4 and map to A-D
+        number_option = re.search(r"\b([1-4])\b", response)
+        if number_option:
+            number_to_letter = {"1": "A", "2": "B", "3": "C", "4": "D"}
+            return number_to_letter[number_option.group(1)]
+
         return None

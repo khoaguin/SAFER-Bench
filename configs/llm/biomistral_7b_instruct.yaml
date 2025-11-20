@@ -1,6 +1,6 @@
 # BioMistral 7B configuratio
-model: "BioMistral/BioMistral-7B"
+model: "mistralai/Mistral-7B-Instruct-v0.3"
 device: "auto"  # Automatically use CUDA/MPS/CPU based on availability
 max_new_tokens: 50
 temperature: 0.7
-category: "medical"
+category: "general"
