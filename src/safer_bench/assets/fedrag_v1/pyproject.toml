@@ -16,6 +16,7 @@ dependencies = [
     "tqdm>=4.67",
     "sentence_transformers>=5.0.0",
     "syft_flwr",
+    "sentencepiece>=0.2.1",
 ]
 
 [tool.hatch.build.targets.wheel]
