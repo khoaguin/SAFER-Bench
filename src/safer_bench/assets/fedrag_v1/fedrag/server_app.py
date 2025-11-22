@@ -16,10 +16,9 @@ from sklearn.metrics import accuracy_score
 from fedrag.llm_querier import LLMQuerier
 from fedrag.mirage_qa import MirageQA
 
-# TODO: Fix this path
-mirage_file = Path(
-    "/Users/khoaguin/Desktop/projects/NISEC/safer-bench/datasets/mirage_qa.json"
-)
+# MirageQA dataset path will be injected via config at runtime
+# from fedrag_adapter.py - this ensures the path works both in dev
+# and when the code is copied to RDS/SyftBox network directories
 
 
 def node_online_loop(grid: Grid) -> list[int]:
@@ -37,7 +36,7 @@ def get_hash(doc):
     return hashlib.sha256(doc.encode())
 
 
-def merge_documents(documents, scores, knn, k_rrf=0, reverse_sort=False) -> list[str]:
+def merge_documents(documents, scores, knn, k_rrf=60, reverse_sort=False) -> list[str]:
     RRF_dict = defaultdict(dict)
     sorted_scores = np.array(scores).argsort()
     if reverse_sort:  # from larger to smaller scores
@@ -152,8 +151,18 @@ def main(grid: Grid, context: Context) -> None:
     use_gpu = True if use_gpu.lower() == "true" else False
     max_new_tokens = int(context.run_config.get("server-llm-max-new-tokens", 50))
 
+    # Get MirageQA dataset path from config (injected by fedrag_adapter)
+    mirage_file_path = context.run_config["server-mirage-qa-path"]
+    mirage_file = Path(mirage_file_path)
+
+    # Auto-download MirageQA dataset if not found
     if not mirage_file.exists():
-        raise FileNotFoundError(f"Server: MirageQA dataset not found at {mirage_file}")
+        print(f"⬇️  MirageQA dataset not found at {mirage_file}")
+        print(f"📥 Downloading from {MirageQA.RAW_JSON_FILE}...")
+        mirage_file.parent.mkdir(parents=True, exist_ok=True)
+        MirageQA.download(mirage_file)
+        print(f"✅ Downloaded MirageQA dataset to {mirage_file}")
+
     datasets = {key: MirageQA(key, mirage_file) for key in qa_datasets}
 
     llm_querier = LLMQuerier(model_name, use_gpu)

@@ -1,0 +1,8 @@
+# Mistral 7B Instruct v0.3 - General-purpose baseline
+# This is the base model that BioMistral-7B was fine-tuned from
+# Perfect for comparing general vs. domain-specific (medical) performance
+model: "mistralai/Mistral-7B-Instruct-v0.3"
+device: "auto"  # Automatically use CUDA/MPS/CPU based on availability
+max_new_tokens: 50
+temperature: 0.7
+category: "general"

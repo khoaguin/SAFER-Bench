@@ -227,6 +227,7 @@ class FedRAGProjectAdapter:
             llm_model_map = {
                 "smollm_1.7b": "HuggingFaceTB/SmolLM2-1.7B-Instruct",
                 "biomistral_7b": "BioMistral/BioMistral-7B",
+                "mistral_7b_instruct": "mistralai/Mistral-7B-Instruct-v0.3",
             }
             model_name = llm_config.get("model", "smollm_1.7b")
             app_config["server-llm-hfpath"] = llm_model_map.get(
@@ -236,6 +237,12 @@ class FedRAGProjectAdapter:
 
         app_config["server-llm-use-gpu"] = str(llm_config.get("use_gpu", False)).lower()
         app_config["server-llm-max-new-tokens"] = llm_config.get("max_new_tokens", 50)
+
+        # Dataset path configuration (absolute path to mirage_qa.json)
+        # Use project root to construct absolute path
+        project_root = Path(__file__).parent.parent.parent
+        mirage_file_path = project_root / "datasets" / "mirage_qa.json"
+        app_config["server-mirage-qa-path"] = str(mirage_file_path.resolve())
 
     def _copy_uv_sources(self, pyproject: Dict):
         """Copy [tool.uv.sources] from main project to FedRAG project.
