@@ -150,6 +150,7 @@ def main(grid: Grid, context: Context) -> None:
     use_gpu = context.run_config.get("server-llm-use-gpu", False)
     use_gpu = True if use_gpu.lower() == "true" else False
     max_new_tokens = int(context.run_config.get("server-llm-max-new-tokens", 50))
+    gguf_file = context.run_config.get("server-llm-gguf-file", None)
 
     # Get MirageQA dataset path from config (injected by fedrag_adapter)
     mirage_file_path = context.run_config["server-mirage-qa-path"]
@@ -165,7 +166,7 @@ def main(grid: Grid, context: Context) -> None:
 
     datasets = {key: MirageQA(key, mirage_file) for key in qa_datasets}
 
-    llm_querier = LLMQuerier(model_name, use_gpu)
+    llm_querier = LLMQuerier(model_name, use_gpu, gguf_file=gguf_file)
     expected_answers, predicted_answers, question_times, unanswered_questions = (
         defaultdict(list),
         defaultdict(list),

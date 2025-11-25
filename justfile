@@ -22,11 +22,17 @@ _nc := '\033[0m'
 # ---------------------------------------------------------------------------------------------------------------------
 
 # Development: quick run with data subsets (fast iteration)
+# Available LLMs:
+#   Small (7B): smollm_1.7b, biomistral_7b, mistral_7b_instruct
+#   Large (70B GGUF): llama3.3_70b_gguf, openbiollm_70b_gguf (tested on Mac M4 Max ✅, ~52GB RAM)a
 run-dry federation="separated_2do" llm="smollm_1.7b" *args="":
     @echo -e "{{_cyan}}🚀 Running SAFER-Bench in SUBSET mode (fast) with {{federation}} and {{llm}}...{{_nc}}"
     uv run python src/safer_bench/main.py dataset.use_subset=true qa.num_questions=2 federation={{federation}} llm={{llm}} {{args}}
 
 # Production: full benchmark with complete datasets
+# Available LLMs:
+#   Small (7B): smollm_1.7b, biomistral_7b, mistral_7b_instruct
+#   Large (70B GGUF): llama3.3_70b_gguf, openbiollm_70b_gguf (tested on Mac M4 Max ✅, ~52GB RAM)
 run federation="separated_2do" llm="smollm_1.7b" *args="":
     @echo -e "{{_green}}🔬 Running SAFER-Bench in FULL mode (complete) with {{federation}} and {{llm}}...{{_nc}}"
     uv run python src/safer_bench/main.py dataset.use_subset=false federation={{federation}} llm={{llm}} {{args}}

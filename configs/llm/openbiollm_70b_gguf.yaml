@@ -1,0 +1,26 @@
+# OpenBioLLM-Llama3-70B (GGUF Q5_K_M) - Medical-specialized
+# Built on Llama 3 70B with medical instruction fine-tuning + DPO
+# Quantized to 5-bit for excellent quality with reduced memory footprint
+#
+# Performance: PubMedQA 78.97%, Average biomedical datasets 86.06%
+# Outperforms GPT-4, Gemini, Meditron-70B, Med-PaLM-1/2 on biomedical tasks
+#
+# MEMORY REQUIREMENTS:
+# - Model on disk: ~50GB
+# - RAM during inference: ~52GB
+#
+# GGUF Q5_K_M Benefits:
+# - Excellent quality (minimal loss vs FP16)
+# - 3x smaller than FP16 (50GB vs 140GB)
+# - Metal GPU acceleration on Apple Silicon
+# - Fast inference: 20-40 tokens/sec
+#
+# Model: LoneStriker/OpenBioLLM-Llama3-70B-GGUF
+# File: OpenBioLLM-Llama3-70B-Q5_K_M.gguf
+model: "LoneStriker/OpenBioLLM-Llama3-70B-GGUF"
+gguf_file: "OpenBioLLM-Llama3-70B-Q5_K_M.gguf"
+device: "auto"
+max_new_tokens: 50
+temperature: 0.7
+category: "medical"
+model_type: "gguf"

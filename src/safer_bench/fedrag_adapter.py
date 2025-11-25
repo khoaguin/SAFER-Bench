@@ -228,6 +228,8 @@ class FedRAGProjectAdapter:
                 "smollm_1.7b": "HuggingFaceTB/SmolLM2-1.7B-Instruct",
                 "biomistral_7b": "BioMistral/BioMistral-7B",
                 "mistral_7b_instruct": "mistralai/Mistral-7B-Instruct-v0.3",
+                "llama3.3_70b_gguf": "unsloth/Llama-3.3-70B-Instruct-GGUF",
+                "openbiollm_70b_gguf": "LoneStriker/OpenBioLLM-Llama3-70B-GGUF",
             }
             model_name = llm_config.get("model", "smollm_1.7b")
             app_config["server-llm-hfpath"] = llm_model_map.get(
@@ -237,6 +239,10 @@ class FedRAGProjectAdapter:
 
         app_config["server-llm-use-gpu"] = str(llm_config.get("use_gpu", False)).lower()
         app_config["server-llm-max-new-tokens"] = llm_config.get("max_new_tokens", 50)
+
+        # GGUF file configuration (for GGUF models)
+        if "gguf_file" in llm_config:
+            app_config["server-llm-gguf-file"] = llm_config["gguf_file"]
 
         # Dataset path configuration (absolute path to mirage_qa.json)
         # Use project root to construct absolute path

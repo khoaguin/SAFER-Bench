@@ -17,6 +17,10 @@ dependencies = [
     "sentence_transformers>=5.0.0",
     "syft_flwr",
     "sentencepiece>=0.2.1",
+    "accelerate>=1.0.0",
+    "bitsandbytes>=0.45.0; sys_platform != 'darwin'",
+    "autoawq>=0.2.0; sys_platform != 'darwin'",
+    "llama-cpp-python>=0.3.0",
 ]
 
 [tool.hatch.build.targets.wheel]
