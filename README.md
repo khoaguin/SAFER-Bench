@@ -2,7 +2,27 @@
 
 SAFER-Bench is a comprehensive benchmark framework for evaluating Federated Retrieval-Augmented Generation (RAG) systems with approval-based privacy controls. It enables systematic evaluation of retrieval algorithms, merging strategies, LLMs, and privacy mechanisms in realistic federated settings where Data Owners (DOs) maintain control over their data.
 
-![safer-bench-architecture](./docs/images/architecture.png)
+<p align="center">
+  <img src="./docs/images/architecture.png" alt="safer-bench-architecture" width="700">
+</p>
+
+## Federation Configurations
+
+Federation configs define how data is distributed across Data Owners (DOs):
+
+| Config | DOs | Distribution | Description |
+|--------|-----|--------------|-------------|
+| `centralized_1do` | 1 | Centralized | Baseline: single DO holds all datasets (StatPearls + Textbooks) |
+| `separated_2do` | 2 | Partitioned | Each DO holds one complete dataset (DO1: StatPearls, DO2: Textbooks) |
+| `hybrid_2do` | 2 | Hybrid | Each DO holds 50% of both datasets |
+| `hybrid_3do` | 3 | Hybrid | Each DO holds ~33% of both datasets |
+| `hybrid_4do` | 4 | Hybrid | Each DO holds 25% of both datasets |
+
+### Distribution Strategies
+
+- **Centralized**: Non-federated baseline for comparison. All data in one location.
+- **Separated/Partitioned**: Each DO specializes in one corpus. Simulates domain-specific data silos.
+- **Hybrid**: Data distributed evenly across DOs. Simulates collaborative networks with shared data types.
 
 ## Benchmarked Models
 
@@ -83,14 +103,6 @@ just run-all-federations llm=biomistral_7b
 just run-dry-inspect
 just run-inspect
 ```
-
-### Available Options
-
-**Federation configs**: `separated_2do`, `hybrid_2do`, `hybrid_3do`, `hybrid_4do`, `centralized_1do`
-
-**LLM configs**: `smollm_1.7b`, `biomistral_7b`, `mistral_7b_instruct`, `openbiollm_70b_gguf`, `llama3.3_70b_gguf`
-
-**Privacy configs**: `none`, `dp_0.1`, `dp_1.0`
 
 ### Cleanup
 
