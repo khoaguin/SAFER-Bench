@@ -52,7 +52,7 @@ class DataOwnerInfo(BaseModel):
     @classmethod
     def validate_datasets(cls, v: Dict[str, float]) -> Dict[str, float]:
         """Validate dataset names and proportions."""
-        valid_datasets = ["statpearls", "textbooks", "mimic-iv-note", "mimic-iv-bhc"]
+        valid_datasets = ["statpearls", "textbooks", "mimic-iv-note"]
 
         # Validate dataset names
         for dataset_name in v.keys():

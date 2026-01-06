@@ -1,7 +1,7 @@
 # Separated/Partitioned distribution: Each DO maintains one complete dataset
-# DO1 holds all of StatPearls, DO2 holds all of Textbooks
-name: separated_2do
-num_data_owners: 2
+# DO1 holds all of StatPearls, DO2 holds all of Textbooks, DO3 holds all of MIMIC-IV-Note
+name: separated_3do
+num_data_owners: 3
 
 # Email addresses for the federation participants
 aggregator: "ds@saferbench.com"
@@ -18,6 +18,12 @@ do2:
   distribution_strategy: "single"
   datasets:
     textbooks: 1.0   # 100% of textbooks
+
+do3:
+  email: "do3@saferbench.com"
+  distribution_strategy: "single"
+  datasets:
+    mimic-iv-note: 1.0  # 100% of MIMIC clinical notes
 
 # Federation approval behavior
 approval:

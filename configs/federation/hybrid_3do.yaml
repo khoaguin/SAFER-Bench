@@ -1,5 +1,5 @@
 # Hybrid distribution: Each DO gets portions of all datasets
-# DO1, DO2, DO3 each hold 33.3% of StatPearls and 33.3% of Textbooks
+# DO1, DO2, DO3 each hold 33.3% of StatPearls, Textbooks, and MIMIC-IV-Note
 name: hybrid_3do
 num_data_owners: 3
 
@@ -11,22 +11,25 @@ do1:
   email: "do1@saferbench.com"
   distribution_strategy: "hybrid"
   datasets:
-    statpearls: 0.333  # 33.3% of statpearls
-    textbooks: 0.333   # 33.3% of textbooks
+    statpearls: 0.333     # 33.3% of statpearls
+    textbooks: 0.333      # 33.3% of textbooks
+    mimic-iv-note: 0.333  # 33.3% of MIMIC clinical notes
 
 do2:
   email: "do2@saferbench.com"
   distribution_strategy: "hybrid"
   datasets:
-    statpearls: 0.333  # 33.3% of statpearls
-    textbooks: 0.333   # 33.3% of textbooks
+    statpearls: 0.333     # 33.3% of statpearls
+    textbooks: 0.333      # 33.3% of textbooks
+    mimic-iv-note: 0.333  # 33.3% of MIMIC clinical notes
 
 do3:
   email: "do3@saferbench.com"
   distribution_strategy: "hybrid"
   datasets:
-    statpearls: 0.334  # 33.4% of statpearls (remaining)
-    textbooks: 0.334   # 33.4% of textbooks (remaining)
+    statpearls: 0.334     # 33.4% of statpearls (remaining)
+    textbooks: 0.334      # 33.4% of textbooks (remaining)
+    mimic-iv-note: 0.334  # 33.4% of MIMIC clinical notes (remaining)
 
 # Federation approval behavior
 approval:

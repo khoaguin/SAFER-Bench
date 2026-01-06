@@ -1,5 +1,5 @@
 # Centralized baseline: Single DO with all datasets merged
-# DO1 holds all of StatPearls and Textbooks combined
+# DO1 holds all of StatPearls, Textbooks, and MIMIC-IV-Note combined
 name: centralized_1do
 num_data_owners: 1
 
@@ -11,8 +11,9 @@ do1:
   email: "do1@saferbench.com"
   distribution_strategy: "centralized"
   datasets:
-    statpearls: 1.0  # All of statpearls
-    textbooks: 1.0   # All of textbooks
+    statpearls: 1.0     # All of statpearls
+    textbooks: 1.0      # All of textbooks
+    mimic-iv-note: 1.0  # All of MIMIC clinical notes
 
 # Federation approval behavior
 approval:
