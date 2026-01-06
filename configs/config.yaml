@@ -21,7 +21,7 @@ mlflow:
 
 # QA Datasets
 qa:
-  datasets: "pubmedqa|bioasq"
+  datasets: "pubmedqa|bioasq|mmlu_med|medqa_us|medmcqa"
   num_questions: 100  # Number of questions per dataset. When run dry, will be 2
   query_types: ["factual", "reasoning", "comparative"]  # From README
 

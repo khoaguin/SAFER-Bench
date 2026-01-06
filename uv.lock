@@ -3731,7 +3731,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sentence-transformers", specifier = ">=5.0.0" },
     { name = "sentencepiece", specifier = ">=0.2.1" },
-    { name = "syft-flwr", specifier = ">=0.4.3" },
+    { name = "syft-flwr", specifier = "==0.4.3" },
     { name = "tomli", specifier = ">=2.3.0" },
     { name = "tomli-w", specifier = ">=1.2.0" },
     { name = "tqdm", specifier = ">=4.67" },
