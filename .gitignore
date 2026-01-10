@@ -9,6 +9,7 @@ datasets/*
 
 # AI artifacts
 **.claude
+CLAUDE.md
 
 # run artifacts
 **local_syftbox_network

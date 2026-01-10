@@ -45,7 +45,7 @@ class FederationConfig:
 
     # Timeouts
     DEFAULT_JOB_READY_TIMEOUT = 60  # seconds
-    DATASET_UPLOAD_TIMEOUT = 60  # seconds
+    DATASET_UPLOAD_TIMEOUT = 300  # seconds (5 min for large datasets like MIMIC)
     ASYNC_GATHER_TIMEOUT = 600  # seconds for general async.gather operations
     PROCESS_CANCEL_TIMEOUT = 5.0  # seconds
 
