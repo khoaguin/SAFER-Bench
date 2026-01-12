@@ -16,7 +16,6 @@ class DataOwnerInfo(BaseModel):
     Supports multiple distribution strategies:
     - 'single': Each DO gets one complete dataset
     - 'hybrid': Each DO gets configurable portions of multiple datasets
-    - 'topic': Each DO gets documents filtered by medical specialties
     - 'centralized': Single DO gets all datasets merged
     - 'specialty': Each DO gets clinical notes from a single medical specialty
     """
@@ -24,17 +23,11 @@ class DataOwnerInfo(BaseModel):
     email: EmailStr
 
     # Unified datasets field: Dict of dataset_name -> proportion
-    # For single/topic/centralized: use 1.0 for all datasets
+    # For single/centralized: use 1.0 for all datasets
     # For hybrid: use fractional values that sum to 1.0
     datasets: Dict[str, float] = Field(
         ...,
         description="Dict of dataset_name: proportion (0-1]. Use 1.0 for full dataset.",
-    )
-
-    # Topics for filtering (only used with 'topic' strategy)
-    topics: Optional[List[str]] = Field(
-        None,
-        description="List of medical topics/specialties for 'topic' strategy",
     )
 
     # Specialty for specialty-based distribution (only used with 'specialty' strategy)
@@ -46,7 +39,7 @@ class DataOwnerInfo(BaseModel):
     # Distribution strategy type
     distribution_strategy: str = Field(
         "single",
-        description="Strategy: 'single', 'hybrid', 'topic', 'centralized', or 'specialty'",
+        description="Strategy: 'single', 'hybrid', 'centralized', or 'specialty'",
     )
 
     # Runtime field: partition name (set after partitioning)
@@ -81,7 +74,7 @@ class DataOwnerInfo(BaseModel):
     @classmethod
     def validate_strategy(cls, v: str) -> str:
         """Validate distribution strategy."""
-        valid_strategies = ["single", "hybrid", "topic", "centralized", "specialty"]
+        valid_strategies = ["single", "hybrid", "centralized", "specialty"]
         if v not in valid_strategies:
             raise ValueError(
                 f"Invalid distribution strategy: {v}. Must be one of {valid_strategies}."
@@ -103,13 +96,6 @@ class DataOwnerInfo(BaseModel):
             if len(self.datasets) < 2:
                 raise ValueError(
                     f"'hybrid' strategy requires at least 2 datasets, got {len(self.datasets)}"
-                )
-
-        elif self.distribution_strategy == "topic":
-            # Topic strategy: requires topics field
-            if self.topics is None or len(self.topics) == 0:
-                raise ValueError(
-                    "'topic' strategy requires 'topics' field with at least one topic"
                 )
 
         elif self.distribution_strategy == "centralized":

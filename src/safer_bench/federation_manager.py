@@ -1042,9 +1042,6 @@ class FederationManager:
                     distribution_strategy=do_config.get(
                         "distribution_strategy", "single"
                     ),
-                    topics=list(do_config.topics)
-                    if hasattr(do_config, "topics")
-                    else None,
                     specialty=do_config.get("specialty", None),
                 )
             )

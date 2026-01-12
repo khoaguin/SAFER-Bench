@@ -17,12 +17,14 @@ Federation configs define how data is distributed across Data Owners (DOs):
 | `hybrid_2do` | 2 | Hybrid | Each DO holds 50% of both datasets |
 | `hybrid_3do` | 3 | Hybrid | Each DO holds ~33% of both datasets |
 | `hybrid_4do` | 4 | Hybrid | Each DO holds 25% of both datasets |
+| `specialty_7do` | 7 | Specialty | Each DO holds clinical notes from one medical specialty (MIMIC-IV-Note) |
 
 ### Distribution Strategies
 
 - **Centralized**: Non-federated baseline for comparison. All data in one location.
 - **Separated/Partitioned**: Each DO specializes in one corpus. Simulates domain-specific data silos.
 - **Hybrid**: Data distributed evenly across DOs. Simulates collaborative networks with shared data types.
+- **Specialty**: Each DO holds clinical notes from a single medical specialty (Cardiology, Oncology, Neurology, Pulmonology, Gastroenterology, Nephrology, General). Simulates real-world healthcare institutions with specialty-specific records.
 
 ## Benchmarked Models
 
@@ -110,3 +112,36 @@ just run-inspect
 just clean         # Clean running artifacts and caches
 just clean-output  # Clean output directories
 ```
+
+### Specialty-Based Benchmarks (MIMIC-IV-Note)
+
+Specialty-based distribution partitions clinical notes by medical specialty, modeling real-world healthcare institutions.
+
+**1. Generate specialty mapping (one-time prerequisite):**
+```bash
+just generate-specialty-mapping              # Both subset and full
+just generate-specialty-mapping --subset-only
+just generate-specialty-mapping --full-only
+```
+
+**2. Run specialty benchmark:**
+```bash
+# Quick test (subset, 2 questions)
+just run-dry federation=specialty_7do llm=smollm_1.7b
+
+# Full benchmark
+just run federation=specialty_7do llm=biomistral_7b
+```
+
+**Medical Specialties:**
+| DO | Specialty | Description |
+|----|-----------|-------------|
+| DO1 | Cardiology | Heart and cardiovascular conditions |
+| DO2 | Oncology | Cancer and tumor-related cases |
+| DO3 | Neurology | Brain and nervous system disorders |
+| DO4 | Pulmonology | Lung and respiratory conditions |
+| DO5 | Gastroenterology | Digestive system disorders |
+| DO6 | Nephrology | Kidney and renal conditions |
+| DO7 | General | Infectious diseases and miscellaneous |
+
+See `docs/plans/specialty_based_distribution.md` for implementation details.

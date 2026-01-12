@@ -6,21 +6,29 @@ This document describes the dataset structure, configuration, and usage in SAFER
 
 ```
 datasets/
-├── subsets/          # Small datasets for rapid prototyping
+├── subsets/                    # Small datasets for rapid prototyping
 │   ├── statpearls/
-│   │   ├── private/  # Private data (used by DOs)
-│   │   └── mock/     # Mock data (visible to DS)
-│   └── textbooks/
-│       ├── private/
-│       └── mock/
-├── full/             # Complete datasets for production benchmarking
+│   │   ├── private/            # Private data (used by DOs)
+│   │   └── mock/               # Mock data (visible to DS)
+│   ├── textbooks/
+│   │   ├── private/
+│   │   └── mock/
+│   └── mimic-iv-note/
+│       ├── private/chunk/      # Clinical note chunks
+│       ├── mock/
+│       └── specialty_mapping.json  # Chunk-to-specialty mapping
+├── full/                       # Complete datasets for production benchmarking
 │   ├── statpearls/
 │   │   ├── private/
 │   │   └── mock/
-│   └── textbooks/
-│       ├── private/
-│       └── mock/
-└── mirage_qa.json    # Evaluation questions (shared)
+│   ├── textbooks/
+│   │   ├── private/
+│   │   └── mock/
+│   └── mimic-iv-note/
+│       ├── private/chunk/
+│       ├── mock/
+│       └── specialty_mapping.json  # Generated via: just generate-specialty-mapping
+└── mirage_qa.json              # Evaluation questions (shared)
 ```
 
 ## Dataset Modes: Subset vs Full
@@ -128,3 +136,69 @@ Each dataset contains:
 - **private/**: Actual corpus data (FAISS index, chunks, doc IDs)
 - **mock/**: Sample data for testing (subset of private)
 - **README.md**: Dataset description
+
+## Specialty-Based Distribution (MIMIC-IV-Note)
+
+The MIMIC-IV-Note dataset supports specialty-based partitioning, where clinical notes are classified into medical specialties for distribution across Data Owners.
+
+### Specialty Mapping
+
+The `specialty_mapping.json` file maps each chunk ID to its classified medical specialty:
+
+```json
+{
+  "discharge_10005812": "general",
+  "discharge_10009614": "gastroenterology",
+  "discharge_10009686": "cardiology",
+  ...
+}
+```
+
+### Generating Specialty Mapping
+
+Run the mapping generator before using specialty-based federation:
+
+```bash
+just generate-specialty-mapping              # Both subset and full
+just generate-specialty-mapping --subset-only
+just generate-specialty-mapping --full-only
+```
+
+Or directly:
+```bash
+uv run python scripts/generate_specialty_mapping.py [--subset-only|--full-only]
+```
+
+### Medical Specialties
+
+| Specialty | Description | Example Keywords |
+|-----------|-------------|------------------|
+| Cardiology | Heart and cardiovascular | cardiac, coronary, arrhythmia, troponin |
+| Oncology | Cancer and tumors | cancer, chemotherapy, metastasis, carcinoma |
+| Neurology | Brain and nervous system | stroke, seizure, Parkinson's, EEG |
+| Pulmonology | Lung and respiratory | pneumonia, COPD, ventilator, ARDS |
+| Gastroenterology | Digestive system | liver, hepatitis, colonoscopy, cirrhosis |
+| Nephrology | Kidney and renal | dialysis, creatinine, CKD, transplant |
+| General | Infectious/miscellaneous | sepsis, infection, fever, antibiotic |
+
+### Dataset Statistics (Subset)
+
+| Specialty | Chunks | Percentage |
+|-----------|--------|------------|
+| Cardiology | ~1,200 | ~16% |
+| Oncology | ~800 | ~11% |
+| Neurology | ~900 | ~12% |
+| Pulmonology | ~1,100 | ~15% |
+| Gastroenterology | ~700 | ~10% |
+| Nephrology | ~600 | ~8% |
+| General | ~2,000 | ~28% |
+
+### Classification Method
+
+Notes are classified using keyword-based matching with section weighting:
+- **Discharge Diagnosis**: 10x weight
+- **Chief Complaint**: 8x weight
+- **Assessment & Plan**: 5x weight
+- **History of Present Illness**: 3x weight
+
+See `src/safer_bench/specialty_classifier.py` for implementation details.
