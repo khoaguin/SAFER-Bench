@@ -1,0 +1,69 @@
+# Specialty-based distribution: Each DO holds clinical notes from one medical specialty
+# Models real-world specialized healthcare institutions
+# Only MIMIC-IV-Note is partitioned by specialty; StatPearls/Textbooks are shared reference knowledge
+name: specialty_7do
+num_data_owners: 7
+
+# Email addresses for the federation participants
+aggregator: "ds@saferbench.com"
+
+# Data Owner configurations - each represents a specialized hospital
+do1:
+  email: "do1@saferbench.com"
+  distribution_strategy: "specialty"
+  specialty: "cardiology"
+  datasets:
+    mimic-iv-note: 1.0
+
+do2:
+  email: "do2@saferbench.com"
+  distribution_strategy: "specialty"
+  specialty: "oncology"
+  datasets:
+    mimic-iv-note: 1.0
+
+do3:
+  email: "do3@saferbench.com"
+  distribution_strategy: "specialty"
+  specialty: "neurology"
+  datasets:
+    mimic-iv-note: 1.0
+
+do4:
+  email: "do4@saferbench.com"
+  distribution_strategy: "specialty"
+  specialty: "pulmonology"
+  datasets:
+    mimic-iv-note: 1.0
+
+do5:
+  email: "do5@saferbench.com"
+  distribution_strategy: "specialty"
+  specialty: "gastroenterology"
+  datasets:
+    mimic-iv-note: 1.0
+
+do6:
+  email: "do6@saferbench.com"
+  distribution_strategy: "specialty"
+  specialty: "nephrology"
+  datasets:
+    mimic-iv-note: 1.0
+
+do7:
+  email: "do7@saferbench.com"
+  distribution_strategy: "specialty"
+  specialty: "general"
+  datasets:
+    mimic-iv-note: 1.0
+
+# Federation approval behavior
+approval:
+  percentage: 1.0
+  mechanism: "static"
+
+# Local setup configuration
+setup:
+  mode: "local"
+  root_dir: "."
+  network_key: "saferbench_network"

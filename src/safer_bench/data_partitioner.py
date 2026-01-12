@@ -15,6 +15,10 @@ from typing import Dict, List, Optional
 from loguru import logger
 
 from safer_bench.dataset_utils import get_dataset_path
+from safer_bench.specialty_classifier import (
+    load_specialty_mapping,
+    get_chunks_by_specialty,
+)
 
 
 class DataPartitioner:
@@ -208,6 +212,90 @@ class DataPartitioner:
         self._create_mock_dir(output_path, datasets, "centralized")
 
         logger.success(f"Centralized partition created at {output_path}")
+
+    def create_specialty_partition(
+        self,
+        specialty: str,
+        output_path: Path,
+        specialty_mapping_path: Path,
+        use_subset: bool = False,
+        project_root_dir: Optional[Path] = None,
+    ) -> None:
+        """Create a partition containing only chunks of a specified medical specialty.
+
+        This method filters MIMIC-IV-Note chunks based on a pre-computed specialty
+        mapping (from specialty_classifier.py) and creates a partition for a
+        specialized healthcare institution (e.g., cardiology hospital).
+
+        Args:
+            specialty: Medical specialty name (e.g., 'cardiology', 'oncology')
+            output_path: Path to output partition directory (private/)
+            specialty_mapping_path: Path to specialty_mapping.json file
+            use_subset: Whether to use subset or full datasets
+            project_root_dir: Optional root directory
+        """
+        logger.info(f"Creating specialty partition for: {specialty}")
+
+        # Load the specialty mapping
+        mapping = load_specialty_mapping(specialty_mapping_path)
+        logger.debug(f"Loaded specialty mapping with {len(mapping)} entries")
+
+        # Get chunk IDs for this specialty
+        specialty_chunk_ids = get_chunks_by_specialty(mapping, specialty.lower())
+        logger.info(
+            f"Found {len(specialty_chunk_ids)} chunks for specialty '{specialty}'"
+        )
+
+        if not specialty_chunk_ids:
+            raise ValueError(
+                f"No chunks found for specialty '{specialty}' in mapping at {specialty_mapping_path}"
+            )
+
+        # Create output directories
+        output_chunk_dir = output_path / "chunk"
+        output_chunk_dir.mkdir(parents=True, exist_ok=True)
+
+        # Get source MIMIC-IV-Note dataset path
+        dataset_path = get_dataset_path("mimic-iv-note", use_subset, project_root_dir)
+        source_chunk_dir = dataset_path / "private" / "chunk"
+
+        if not source_chunk_dir.exists():
+            raise FileNotFoundError(
+                f"MIMIC-IV-Note chunk directory not found: {source_chunk_dir}"
+            )
+
+        # Copy chunks that belong to this specialty
+        copied_count = 0
+        for chunk_id in specialty_chunk_ids:
+            source_file = source_chunk_dir / f"{chunk_id}.jsonl"
+            if source_file.exists():
+                # Prefix with dataset name for consistency
+                dest_file = output_chunk_dir / f"mimic-iv-note_{chunk_id}.jsonl"
+                shutil.copy2(source_file, dest_file)
+                copied_count += 1
+            else:
+                logger.warning(f"Chunk file not found: {source_file}")
+
+        logger.info(
+            f"Copied {copied_count}/{len(specialty_chunk_ids)} chunks to {output_chunk_dir}"
+        )
+
+        if copied_count == 0:
+            raise ValueError(
+                f"No chunk files could be copied for specialty '{specialty}'"
+            )
+
+        # Create mock directory with README
+        self._create_mock_dir(
+            output_path,
+            {"mimic-iv-note": 1.0},
+            f"specialty-{specialty}",
+        )
+
+        logger.success(
+            f"Specialty partition for '{specialty}' created at {output_path} "
+            f"({copied_count} chunks)"
+        )
 
     def _sample_chunks(
         self,

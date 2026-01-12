@@ -18,6 +18,7 @@ class DataOwnerInfo(BaseModel):
     - 'hybrid': Each DO gets configurable portions of multiple datasets
     - 'topic': Each DO gets documents filtered by medical specialties
     - 'centralized': Single DO gets all datasets merged
+    - 'specialty': Each DO gets clinical notes from a single medical specialty
     """
 
     email: EmailStr
@@ -36,10 +37,16 @@ class DataOwnerInfo(BaseModel):
         description="List of medical topics/specialties for 'topic' strategy",
     )
 
+    # Specialty for specialty-based distribution (only used with 'specialty' strategy)
+    specialty: Optional[str] = Field(
+        None,
+        description="Medical specialty for 'specialty' strategy (e.g., 'cardiology', 'oncology')",
+    )
+
     # Distribution strategy type
     distribution_strategy: str = Field(
         "single",
-        description="Strategy: 'single', 'hybrid', 'topic', or 'centralized'",
+        description="Strategy: 'single', 'hybrid', 'topic', 'centralized', or 'specialty'",
     )
 
     # Runtime field: partition name (set after partitioning)
@@ -74,7 +81,7 @@ class DataOwnerInfo(BaseModel):
     @classmethod
     def validate_strategy(cls, v: str) -> str:
         """Validate distribution strategy."""
-        valid_strategies = ["single", "hybrid", "topic", "centralized"]
+        valid_strategies = ["single", "hybrid", "topic", "centralized", "specialty"]
         if v not in valid_strategies:
             raise ValueError(
                 f"Invalid distribution strategy: {v}. Must be one of {valid_strategies}."
@@ -110,6 +117,26 @@ class DataOwnerInfo(BaseModel):
             if len(self.datasets) < 2:
                 raise ValueError(
                     f"'centralized' strategy requires at least 2 datasets, got {len(self.datasets)}"
+                )
+
+        elif self.distribution_strategy == "specialty":
+            # Specialty strategy: requires specialty field and typically MIMIC-IV-Note
+            if self.specialty is None or len(self.specialty) == 0:
+                raise ValueError(
+                    "'specialty' strategy requires 'specialty' field with a medical specialty name"
+                )
+            valid_specialties = [
+                "cardiology",
+                "oncology",
+                "neurology",
+                "pulmonology",
+                "gastroenterology",
+                "nephrology",
+                "general",
+            ]
+            if self.specialty.lower() not in valid_specialties:
+                raise ValueError(
+                    f"Invalid specialty: {self.specialty}. Must be one of {valid_specialties}"
                 )
 
         return self

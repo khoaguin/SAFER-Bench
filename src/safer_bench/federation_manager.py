@@ -1045,6 +1045,7 @@ class FederationManager:
                     topics=list(do_config.topics)
                     if hasattr(do_config, "topics")
                     else None,
+                    specialty=do_config.get("specialty", None),
                 )
             )
 
@@ -1053,12 +1054,13 @@ class FederationManager:
     def _prepare_data_partitions(self) -> None:
         """Prepare custom data partitions based on DO distribution strategies.
 
-        For 'hybrid' and 'centralized' strategies, creates partitioned datasets
-        by sampling/merging chunks. Partitions are created in datasets/{mode}/partitions/.
+        For 'hybrid', 'centralized', and 'specialty' strategies, creates partitioned
+        datasets by sampling/merging/filtering chunks. Partitions are created in
+        datasets/{mode}/partitions/.
         """
         # Check if any DO needs partitioning
         needs_partitioning = any(
-            do.distribution_strategy in ["hybrid", "centralized"]
+            do.distribution_strategy in ["hybrid", "centralized", "specialty"]
             for do in self.data_owners
         )
 
@@ -1108,6 +1110,20 @@ class FederationManager:
                 partitioner.create_centralized_partition(
                     datasets=do_info.datasets,
                     output_path=partition_path,
+                    use_subset=self.use_subset,
+                    project_root_dir=self.root_dir,
+                )
+            elif do_info.distribution_strategy == "specialty":
+                # Specialty-based partitioning: filter MIMIC-IV-Note by medical specialty
+                specialty_mapping_path = (
+                    get_dataset_path("mimic-iv-note", self.use_subset, self.root_dir)
+                    / "specialty_mapping.json"
+                )
+
+                partitioner.create_specialty_partition(
+                    specialty=do_info.specialty,
+                    output_path=partition_path,
+                    specialty_mapping_path=specialty_mapping_path,
                     use_subset=self.use_subset,
                     project_root_dir=self.root_dir,
                 )
