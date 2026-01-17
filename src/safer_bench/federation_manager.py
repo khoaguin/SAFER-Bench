@@ -1257,9 +1257,9 @@ def _setup_job_process_environment(config_path: str) -> None:
     # Set HuggingFace cache to use shared location (avoid re-downloading models)
     os.environ["HF_HOME"] = str(Path.home() / ".cache" / "huggingface")
 
-    # Set message timeout to 30 minutes (1800 seconds) to allow for FAISS index building
-    # DOs may need time to build indexes on first query
-    os.environ["SYFT_FLWR_MSG_TIMEOUT"] = "1800"
+    # Set message timeout to 10 hours (36000 seconds) to allow for FAISS index building
+    # DOs may need significant time to build indexes on first query with full datasets
+    os.environ["SYFT_FLWR_MSG_TIMEOUT"] = "36000"
 
 
 def _run_ds_job_in_process(ds_email: str, job_uid: str, config_path: str) -> None:
