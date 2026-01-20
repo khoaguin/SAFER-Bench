@@ -1,5 +1,6 @@
 """fedrag: A Flower Federated RAG app."""
 
+import gc
 import os
 import re
 
@@ -8,6 +9,15 @@ from loguru import logger
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # to avoid deadlocks during tokenization
+
+
+def _clear_memory_cache():
+    """Clear GPU/MPS memory cache to prevent memory accumulation."""
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    if torch.backends.mps.is_available():
+        torch.mps.empty_cache()
 
 
 class LLMQuerier:
@@ -72,8 +82,15 @@ class LLMQuerier:
         """Load standard Transformers model."""
         logger.info(f"📦 Loading Transformers model: {model_name}")
 
-        # Load model with appropriate settings for size
-        self.model = AutoModelForCausalLM.from_pretrained(model_name).to(self.device)
+        # Load model with float16 for better memory efficiency on GPU/MPS
+        # float16 reduces memory by ~50% with minimal quality loss for inference
+        dtype = torch.float16 if self.device.type in ("cuda", "mps") else torch.float32
+        logger.info(f"📦 Using dtype: {dtype} for device: {self.device}")
+
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=dtype,
+        ).to(self.device)
         logger.info(f"✅ Successfully loaded model: {self.model.config._name_or_path}")
 
         # Load tokenizer
@@ -124,32 +141,45 @@ class LLMQuerier:
 
     def _answer_transformers(self, prompt, max_new_tokens):
         """Generate answer using Transformers model."""
-        inputs = self.tokenizer(
-            prompt, padding=True, return_tensors="pt", truncation=True
-        ).to(self.device)
+        try:
+            inputs = self.tokenizer(
+                prompt, padding=True, return_tensors="pt", truncation=True
+            ).to(self.device)
 
-        attention_mask = (inputs.input_ids != self.tokenizer.pad_token_id).long()
+            attention_mask = (inputs.input_ids != self.tokenizer.pad_token_id).long()
 
-        logger.info(
-            f"🔮 Generating output with Transformers, max_tokens: {max_new_tokens}"
-        )
+            logger.info(
+                f"🔮 Generating output with Transformers, max_tokens: {max_new_tokens}"
+            )
 
-        outputs = self.model.generate(
-            inputs.input_ids,
-            attention_mask=attention_mask,
-            max_new_tokens=max_new_tokens,
-            early_stopping=False,
-            pad_token_id=self.tokenizer.pad_token_id,
-            eos_token_id=self.tokenizer.eos_token_id,
-        )
+            # Use no_grad to prevent gradient accumulation (memory optimization)
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    inputs.input_ids,
+                    attention_mask=attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    early_stopping=False,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                )
 
-        generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        generated_answer = self.__extract_answer(generated_text, prompt)
+            generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            generated_answer = self.__extract_answer(generated_text, prompt)
 
-        logger.info(f"📝 Generated: {generated_text[len(prompt):].strip()[:200]}...")
-        logger.info(f"✓ Extracted answer: {generated_answer}")
+            logger.info(
+                f"📝 Generated: {generated_text[len(prompt):].strip()[:200]}..."
+            )
+            logger.info(f"✓ Extracted answer: {generated_answer}")
 
-        return prompt, generated_answer
+            return prompt, generated_answer
+
+        finally:
+            # Clear intermediate tensors and GPU/MPS cache after each inference
+            # to prevent memory accumulation over many queries
+            del inputs
+            if "outputs" in locals():
+                del outputs
+            _clear_memory_cache()
 
     @classmethod
     def __format_prompt(cls, question, documents, options, dataset_name):

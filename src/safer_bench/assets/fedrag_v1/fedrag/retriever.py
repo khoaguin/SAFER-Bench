@@ -22,16 +22,19 @@ FAISS_DEFAULT_CONFIG = DIR_PATH / "retriever.yaml"
 
 class Retriever:
     def __init__(self, config_file=None):
-        if not config_file:
-            self.config = yaml.safe_load(open(FAISS_DEFAULT_CONFIG, "r"))
-        else:
-            self.config = yaml.safe_load(open(config_file, "r"))
+        config_path = config_file if config_file else FAISS_DEFAULT_CONFIG
+        with open(config_path, "r") as f:
+            self.config = yaml.safe_load(f)
         # load the embedding model and define the embeddings dimensions
         # for the device placement of the SentenceTransformers model we resort
         # to use the device name returned by `sentence_transformers.util.get_device_name()`
         # which will be called by the SentenceTransformer constructor when creating the model
         self.emb_model = SentenceTransformer(self.config["embedding_model"])
         self.emb_dim = self.config["embedding_dimension"]
+
+        # Cache for FAISS indexes and doc_ids to avoid reloading on every query
+        # Key: dataset_name, Value: (index, doc_ids, chunk_dir)
+        self._index_cache = {}
 
     def build_faiss_index(self, dataset_name, batch_size=32, num_chunks=None):
         index_path, doc_ids_path, chunk_dir = _get_dataset_dirs(dataset_name)
@@ -119,18 +122,33 @@ class Retriever:
 
         return
 
+    def _get_cached_index(self, dataset_name):
+        """Get FAISS index from cache, loading if necessary."""
+        if dataset_name not in self._index_cache:
+            # Check if index exists, build if needed
+            if not self.index_exists(dataset_name):
+                logger.info(
+                    f"FAISS index not found for {dataset_name}. Building index..."
+                )
+                self.build_faiss_index(dataset_name)
+                logger.info(f"FAISS index built successfully for {dataset_name}")
+
+            index_path, doc_ids_path, chunk_dir = _get_dataset_dirs(dataset_name)
+
+            # Load and cache the index and doc_ids
+            logger.info(
+                f"[DO] 📂 Loading FAISS index for {dataset_name} (will be cached)"
+            )
+            index = faiss.read_index(str(index_path))
+            doc_ids = np.load(str(doc_ids_path))
+            self._index_cache[dataset_name] = (index, doc_ids, chunk_dir)
+            logger.info(f"[DO] ✅ FAISS index cached for {dataset_name}")
+
+        return self._index_cache[dataset_name]
+
     def query_faiss_index(self, dataset_name, query, knn=8):
-        # Check if index exists, build if needed
-        if not self.index_exists(dataset_name):
-            logger.info(f"FAISS index not found for {dataset_name}. Building index...")
-            self.build_faiss_index(dataset_name)
-            logger.info(f"FAISS index built successfully for {dataset_name}")
-
-        index_path, doc_ids_path, chunk_dir = _get_dataset_dirs(dataset_name)
-
-        # 1. Load the FAISS index and document IDs
-        index = faiss.read_index(str(index_path))
-        doc_ids = np.load(str(doc_ids_path))
+        # 1. Get cached FAISS index and document IDs (loads once, reuses thereafter)
+        index, doc_ids, chunk_dir = self._get_cached_index(dataset_name)
 
         # 2. Generate query embedding
         query_embedding = self.emb_model.encode(query)
@@ -166,9 +184,11 @@ class Retriever:
                         f"Cannot find chunk file for {doc_name} in {chunk_dir}"
                     )
 
-            loaded_snippet = json.loads(
-                open(full_file).read().strip().split("\n")[snippet_idx]
-            )
+            # Use proper file handling to avoid file handle leaks
+            with open(full_file, "r", encoding="utf-8") as f:
+                lines = f.read().strip().split("\n")
+                loaded_snippet = json.loads(lines[snippet_idx])
+
             rank = i + 1
             final_res[doc_id] = {
                 "rank": int(rank),

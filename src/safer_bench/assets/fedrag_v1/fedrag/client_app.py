@@ -8,6 +8,18 @@ from fedrag.retriever import Retriever
 # Flower ClientApp
 app = ClientApp()
 
+# Cache Retriever instance at module level to avoid recreating
+# SentenceTransformer model on every query (memory leak fix)
+_cached_retriever = None
+
+
+def _get_retriever() -> Retriever:
+    """Get or create cached Retriever instance."""
+    global _cached_retriever
+    if _cached_retriever is None:
+        _cached_retriever = Retriever()
+    return _cached_retriever
+
 
 @app.query()
 def query(msg: Message, context: Context):
@@ -20,8 +32,8 @@ def query(msg: Message, context: Context):
     # Extract corpus name
     corpus_name = str(msg.content["config"]["corpus_name"])
 
-    # Initialize retrieval system
-    retriever = Retriever()
+    # Get cached retrieval system (avoids recreating SentenceTransformer per query)
+    retriever = _get_retriever()
     # Use the knn value for retrieving the closest-k documents to the query
     knn = int(msg.content["config"]["knn"])
     retrieved_docs = retriever.query_faiss_index(corpus_name, question, knn)
