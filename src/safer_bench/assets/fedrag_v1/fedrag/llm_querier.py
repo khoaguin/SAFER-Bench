@@ -82,9 +82,9 @@ class LLMQuerier:
         """Load standard Transformers model."""
         logger.info(f"📦 Loading Transformers model: {model_name}")
 
-        # Load model with float16 for better memory efficiency on GPU/MPS
-        # float16 reduces memory by ~50% with minimal quality loss for inference
-        dtype = torch.float16 if self.device.type in ("cuda", "mps") else torch.float32
+        # Use float32 for stability (avoids tokenizer overflow errors on MPS)
+        # float16 can cause numerical issues with some models on Apple Silicon
+        dtype = torch.float32
         logger.info(f"📦 Using dtype: {dtype} for device: {self.device}")
 
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -163,7 +163,15 @@ class LLMQuerier:
                     eos_token_id=self.tokenizer.eos_token_id,
                 )
 
-            generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            # Decode with error handling for tokenizer overflow issues
+            try:
+                generated_text = self.tokenizer.decode(
+                    outputs[0], skip_special_tokens=True
+                )
+            except OverflowError:
+                logger.warning("⚠️ Tokenizer overflow error - skipping question")
+                return prompt, None
+
             generated_answer = self.__extract_answer(generated_text, prompt)
 
             logger.info(
