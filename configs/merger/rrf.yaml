@@ -1,3 +1,4 @@
 # Reciprocal Rank Fusion merger
-type: "RRF"
-k_rrf: 60  # Constant for RRF formula
+# Reference: Cormack, Clarke & Büttcher, SIGIR 2009
+type: "rrf"
+k_rrf: 60  # Constant for RRF formula (higher = more weight to lower ranks)

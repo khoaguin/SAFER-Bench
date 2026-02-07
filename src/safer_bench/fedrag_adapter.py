@@ -3,6 +3,7 @@ FedRAGProjectAdapter: Prepares FedRAG project with injected benchmark parameters
 Handles configuration injection and project preparation for job submission.
 """
 
+import json
 import shutil
 import yaml
 import tomli
@@ -215,10 +216,28 @@ class FedRAGProjectAdapter:
             app_config["clients-corpus-names"] = corpus_names
 
         # Merger configuration
-        merger_type = self.cfg.merger.get("type", "rrf")
-        if merger_type == "rrf":
-            app_config["k-rrf"] = self.cfg.merger.get("k_rrf", 60)
+        # Normalize merger type to lowercase
+        merger_type = self.cfg.merger.get("type", "rrf").lower().strip()
         app_config["merger-type"] = merger_type
+
+        # Build merger params dict and pass as JSON (cleaner than multiple keys)
+        merger_params = {}
+
+        if merger_type in ["rrf", "weighted_rrf"]:
+            merger_params["k_rrf"] = self.cfg.merger.get("k_rrf", 60)
+
+        if merger_type in ["combsum", "combmnz"]:
+            merger_params["normalization"] = self.cfg.merger.get(
+                "normalization", "minmax"
+            )
+
+        if merger_type == "weighted_rrf":
+            weights = self.cfg.merger.get("weights", None)
+            if weights is not None:
+                merger_params["weights"] = list(weights)  # Ensure it's a list
+
+        # Pass all params as JSON string for easy parsing in server_app.py
+        app_config["merger-params"] = json.dumps(merger_params)
 
         # LLM configuration
         llm_config = self.cfg.get("llm", {})

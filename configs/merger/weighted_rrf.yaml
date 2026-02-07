@@ -1,0 +1,8 @@
+# Weighted RRF - RRF with per-source weights for trust/quality
+# Extends standard RRF by allowing different weights for each data owner
+# Use this when DOs have varying data quality or trustworthiness
+type: "weighted_rrf"
+k_rrf: 60
+# weights: [1.0, 0.8, 1.2]  # Per-DO weights (uncomment and adjust as needed)
+# If null/not set, uses uniform weights (equivalent to standard RRF)
+weights: null

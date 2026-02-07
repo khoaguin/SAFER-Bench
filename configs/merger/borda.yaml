@@ -1,0 +1,4 @@
+# Borda Count merger - position-based voting
+# Reference: Aslam & Montague, SIGIR 2001
+# Note: Scores are not comparable to RRF or CombSUM due to different scales
+type: "borda"
