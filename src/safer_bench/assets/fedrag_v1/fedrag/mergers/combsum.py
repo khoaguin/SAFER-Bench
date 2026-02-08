@@ -92,8 +92,12 @@ class CombSUMMerger(BaseMerger):
         )
         top_k = sorted_docs[: self.knn]
 
-        return MergerResult(
+        result = MergerResult(
             documents=[d["doc"] for d in top_k],
             scores=[d["score"] for d in top_k],
             source_counts=[len(d["sources"]) for d in top_k],
         )
+        self._log_merge_stats(
+            "CombSUM", len(documents), len(doc_scores), sources, result
+        )
+        return result

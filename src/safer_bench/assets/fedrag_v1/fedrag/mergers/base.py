@@ -62,3 +62,24 @@ class BaseMerger(ABC):
     def get_hash(doc: str) -> str:
         """Create SHA-256 hash for document deduplication."""
         return hashlib.sha256(doc.encode()).hexdigest()
+
+    def _log_merge_stats(
+        self,
+        merger_name: str,
+        total_docs: int,
+        unique_docs: int,
+        sources: Optional[list[int]],
+        result: "MergerResult",
+    ) -> None:
+        """Log essential merge statistics."""
+        # Show top-3 scores and their source counts
+        top_scores = [f"{s:.3f}" for s in result.scores[:3]]
+        top_src_counts = result.source_counts[:3]
+
+        # Count how many output docs came from multiple sources (relevant for CombMNZ)
+        multi_source = sum(1 for c in result.source_counts if c > 1)
+
+        print(
+            f"[{merger_name}] in={total_docs} → unique={unique_docs} → out={len(result.documents)} | "
+            f"top_scores={top_scores}, src_counts={top_src_counts}, multi_src={multi_source}"
+        )
