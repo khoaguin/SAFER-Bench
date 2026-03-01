@@ -31,6 +31,7 @@ retrieval:
   chunk_size: 512  # Chunk size (can sweep: 256, 512, 1024)
   chunk_overlap: 50  # Overlap (can sweep: 0, 50, 100)
   similarity_metric: "cosine"  # cosine, L2, inner_product
+  query_timeout: 300  # Per-query timeout in seconds (5 min). Set to 0 for no timeout.
 
 # Evaluation settings
 evaluation:

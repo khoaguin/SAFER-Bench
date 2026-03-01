@@ -207,6 +207,9 @@ class FedRAGProjectAdapter:
         app_config["k-nn"] = self.cfg.retrieval.get("k_nn", 8)
         app_config["chunk-size"] = self.cfg.retrieval.get("chunk_size", 512)
         app_config["chunk-overlap"] = self.cfg.retrieval.get("chunk_overlap", 50)
+        app_config["query-timeout"] = self.cfg.retrieval.get(
+            "query_timeout", 300
+        )  # 5 min default
 
         # Corpus configuration (from federation)
         if federation_info:

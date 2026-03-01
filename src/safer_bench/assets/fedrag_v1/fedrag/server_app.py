@@ -39,8 +39,18 @@ def submit_question(
     knn: int,
     node_ids: list,
     corpus_names_iter: iter,
+    timeout: float | None = None,
 ) -> tuple[list[str], list[float], list[int], float]:
     """Submit question to all DOs and collect results.
+
+    Args:
+        grid: Flower Grid instance
+        question: The question to ask
+        question_id: Unique identifier for the question
+        knn: Number of nearest neighbors to retrieve
+        node_ids: List of DO node IDs
+        corpus_names_iter: Iterator for corpus names
+        timeout: Per-query timeout in seconds (None = use env var default)
 
     Returns:
         documents: All retrieved documents from all DOs (flattened)
@@ -77,8 +87,8 @@ def submit_question(
     # Calculate size of outgoing messages (query)
     query_size_bytes = sum(sys.getsizeof(str(msg)) for msg in messages)
 
-    # Send messages and wait for all results
-    replies = grid.send_and_receive(messages)
+    # Send messages and wait for all results (with per-query timeout)
+    replies = grid.send_and_receive(messages, timeout=timeout)
     print(f"✓ Received {len(replies)}/{len(messages)} results")
 
     # Collect results with source tracking
@@ -111,6 +121,14 @@ def main(grid: Grid, context: Context) -> None:
 
     # k-nearest-neighbors for document retrieval at each client
     knn = int(context.run_config["k-nn"])
+
+    # Per-query timeout (0 or None = use env var default which is 10 hours for index building)
+    query_timeout_raw = context.run_config.get("query-timeout", 300)
+    query_timeout = float(query_timeout_raw) if query_timeout_raw else None
+    if query_timeout == 0:
+        query_timeout = None  # 0 means no per-query timeout, use env default
+    if query_timeout:
+        print(f"✓ Per-query timeout: {query_timeout}s")
 
     # Parse merger configuration with error handling
     merger_type = context.run_config.get("merger-type", "rrf")
@@ -196,7 +214,13 @@ def main(grid: Grid, context: Context) -> None:
             question = q["question"]
             q_st = time.time()
             docs, scores, doc_sources, comm_size_mb = submit_question(
-                grid, question, q_id, knn, node_ids, corpus_names_iter
+                grid,
+                question,
+                q_id,
+                knn,
+                node_ids,
+                corpus_names_iter,
+                timeout=query_timeout,
             )
             result = merger.merge(docs, scores, sources=doc_sources)
             merged_docs = result.documents
