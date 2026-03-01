@@ -1,6 +1,6 @@
 """fedrag: A Flower Federated RAG app."""
 
-import hashlib
+import json
 import time
 from collections import defaultdict
 from itertools import cycle
@@ -14,6 +14,7 @@ from flwr.server import Grid, ServerApp
 from sklearn.metrics import accuracy_score
 
 from fedrag.llm_querier import LLMQuerier
+from fedrag.mergers import create_merger
 from fedrag.mirage_qa import MirageQA
 
 # MirageQA dataset path will be injected via config at runtime
@@ -31,43 +32,6 @@ def node_online_loop(grid: Grid) -> list[int]:
     return node_ids
 
 
-def get_hash(doc):
-    # Create and return an SHA-256 hash for the given document
-    return hashlib.sha256(doc.encode())
-
-
-def merge_documents(documents, scores, knn, k_rrf=60, reverse_sort=False) -> list[str]:
-    RRF_dict = defaultdict(dict)
-    sorted_scores = np.array(scores).argsort()
-    if reverse_sort:  # from larger to smaller scores
-        sorted_scores = sorted_scores[::-1]
-    sorted_documents = [documents[i] for i in sorted_scores]
-
-    if k_rrf == 0:
-        # If k_rff is not set then simply return the
-        # sorted documents based on their retrieval score
-        return sorted_documents[:knn]
-    else:
-        for doc_idx, doc in enumerate(sorted_documents):
-            # Given that some returned results/documents could be extremely
-            # large we cannot use the original document as a dictionary key.
-            # Therefore, we first hash the returned string/document to a
-            # representative hash code, and we use that code as a key for
-            # the final RRF dictionary. We follow this approach, because a
-            # document could  have been retrieved twice by multiple clients
-            # but with different scores and depending on these scores we need
-            # to maintain its ranking
-            doc_hash = get_hash(doc)
-            RRF_dict[doc_hash]["rank"] = 1 / (k_rrf + doc_idx + 1)
-            RRF_dict[doc_hash]["doc"] = doc
-
-        RRF_docs = sorted(RRF_dict.values(), key=lambda x: x["rank"], reverse=True)
-        docs = [rrf_res["doc"] for rrf_res in RRF_docs][
-            :knn
-        ]  # select the final top-k / k-nn
-        return docs
-
-
 def submit_question(
     grid: Grid,
     question: str,
@@ -75,7 +39,25 @@ def submit_question(
     knn: int,
     node_ids: list,
     corpus_names_iter: iter,
-):
+    timeout: float | None = None,
+) -> tuple[list[str], list[float], list[int], float]:
+    """Submit question to all DOs and collect results.
+
+    Args:
+        grid: Flower Grid instance
+        question: The question to ask
+        question_id: Unique identifier for the question
+        knn: Number of nearest neighbors to retrieve
+        node_ids: List of DO node IDs
+        corpus_names_iter: Iterator for corpus names
+        timeout: Per-query timeout in seconds (None = use env var default)
+
+    Returns:
+        documents: All retrieved documents from all DOs (flattened)
+        scores: FAISS L2 distances for each document (lower = better)
+        sources: DO index (0-based) for each document
+        comm_size_mb: Total communication size in MB
+    """
     messages = []
     # Send the same Message to each connected node (which run `ClientApp` instances)
     for node_idx, node_id in enumerate(node_ids):
@@ -105,15 +87,19 @@ def submit_question(
     # Calculate size of outgoing messages (query)
     query_size_bytes = sum(sys.getsizeof(str(msg)) for msg in messages)
 
-    # Send messages and wait for all results
-    replies = grid.send_and_receive(messages)
+    # Send messages and wait for all results (with per-query timeout)
+    replies = grid.send_and_receive(messages, timeout=timeout)
     print(f"✓ Received {len(replies)}/{len(messages)} results")
 
-    documents, scores = [], []
-    for reply in replies:
+    # Collect results with source tracking
+    documents, scores, sources = [], [], []
+    for node_idx, reply in enumerate(replies):
         if reply.has_content():
-            documents.extend(reply.content["docs_n_scores"]["documents"])
-            scores.extend(reply.content["docs_n_scores"]["scores"])
+            docs = reply.content["docs_n_scores"]["documents"]
+            scrs = reply.content["docs_n_scores"]["scores"]
+            documents.extend(docs)
+            scores.extend(scrs)
+            sources.extend([node_idx] * len(docs))  # Track which DO returned each doc
 
     # Calculate size of incoming messages (retrieved documents)
     response_size_bytes = sum(
@@ -123,7 +109,7 @@ def submit_question(
     # Total communication size in MB
     total_comm_size_mb = (query_size_bytes + response_size_bytes) / (1024 * 1024)
 
-    return documents, scores, total_comm_size_mb
+    return documents, scores, sources, total_comm_size_mb
 
 
 app = ServerApp()
@@ -133,11 +119,41 @@ app = ServerApp()
 def main(grid: Grid, context: Context) -> None:
     node_ids = node_online_loop(grid)
 
-    # k-reciprocal-rank-fusion is used by the server to merge
-    # the results returned by the clients
-    k_rrf = int(context.run_config["k-rrf"])
     # k-nearest-neighbors for document retrieval at each client
     knn = int(context.run_config["k-nn"])
+
+    # Per-query timeout (0 or None = use env var default which is 10 hours for index building)
+    query_timeout_raw = context.run_config.get("query-timeout", 300)
+    query_timeout = float(query_timeout_raw) if query_timeout_raw else None
+    if query_timeout == 0:
+        query_timeout = None  # 0 means no per-query timeout, use env default
+    if query_timeout:
+        print(f"✓ Per-query timeout: {query_timeout}s")
+
+    # Parse merger configuration with error handling
+    merger_type = context.run_config.get("merger-type", "rrf")
+    merger_params_json = context.run_config.get("merger-params", "{}")
+    try:
+        merger_params = json.loads(merger_params_json)
+    except json.JSONDecodeError:
+        print("⚠️ Invalid merger-params JSON, using defaults")
+        merger_params = {}
+
+    # Build merger config
+    merger_config = {
+        "knn": knn,
+        **merger_params,  # Include k_rrf, normalization, weights from JSON
+    }
+
+    # Create merger with fallback on error
+    try:
+        merger = create_merger(merger_type, **merger_config)
+        print(f"✓ Using merger: {merger_type}")
+    except ValueError as e:
+        print(f"❌ Invalid merger config: {e}")
+        print("   Falling back to RRF")
+        merger = create_merger("rrf", knn=knn, k_rrf=60)
+
     corpus_names = context.run_config["clients-corpus-names"].split("|")
     corpus_names = [c.lower() for c in corpus_names]  # make them lower case
 
@@ -197,10 +213,17 @@ def main(grid: Grid, context: Context) -> None:
                 break
             question = q["question"]
             q_st = time.time()
-            docs, scores, comm_size_mb = submit_question(
-                grid, question, q_id, knn, node_ids, corpus_names_iter
+            docs, scores, doc_sources, comm_size_mb = submit_question(
+                grid,
+                question,
+                q_id,
+                knn,
+                node_ids,
+                corpus_names_iter,
+                timeout=query_timeout,
             )
-            merged_docs = merge_documents(docs, scores, knn, k_rrf)
+            result = merger.merge(docs, scores, sources=doc_sources)
+            merged_docs = result.documents
             options = q["options"]
             answer = q["answer"]
 

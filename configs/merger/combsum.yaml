@@ -1,0 +1,5 @@
+# CombSUM - sum of normalized similarity scores
+# Reference: Fox & Shaw, TREC-2 1994
+# Best overall performance in original paper (16-25% improvement)
+type: "combsum"
+normalization: "minmax"  # Normalize L2 distances to [0,1] similarity

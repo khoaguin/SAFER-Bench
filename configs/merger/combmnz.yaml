@@ -1,0 +1,6 @@
+# CombMNZ - rewards documents found by multiple sources
+# Reference: Fox & Shaw, TREC-2 1994
+# Note: May underperform with disjoint corpora (specialty-based DOs)
+# since consensus across sources is unlikely
+type: "combmnz"
+normalization: "minmax"  # Normalize L2 distances to [0,1] similarity
