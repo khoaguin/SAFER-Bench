@@ -21,6 +21,7 @@ logs/
 outputs/
 multirun/
 results/
+retrieval_logs/
 .ml-flow/
 
 # Writing artifacts
