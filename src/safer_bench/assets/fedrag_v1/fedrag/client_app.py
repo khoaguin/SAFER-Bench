@@ -38,7 +38,8 @@ def query(msg: Message, context: Context):
     knn = int(msg.content["config"]["knn"])
     retrieved_docs = retriever.query_faiss_index(corpus_name, question, knn)
 
-    # Create lists with the computed scores and documents
+    # Create lists with the computed scores, documents, and doc_ids
+    doc_ids = [doc_id for doc_id in retrieved_docs.keys()]
     scores = [doc["score"] for doc_id, doc in retrieved_docs.items()]
     documents = [doc["content"] for doc_id, doc in retrieved_docs.items()]
     print(
@@ -52,6 +53,7 @@ def query(msg: Message, context: Context):
         {
             "documents": documents,
             "scores": scores,
+            "doc_ids": doc_ids,
         }
     )
     reply_record = RecordDict({"docs_n_scores": docs_n_scores})

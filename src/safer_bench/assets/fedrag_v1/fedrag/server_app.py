@@ -40,7 +40,7 @@ def submit_question(
     node_ids: list,
     corpus_names_iter: iter,
     timeout: float | None = None,
-) -> tuple[list[str], list[float], list[int], float]:
+) -> tuple[list[str], list[float], list[int], list[str], float]:
     """Submit question to all DOs and collect results.
 
     Args:
@@ -56,6 +56,7 @@ def submit_question(
         documents: All retrieved documents from all DOs (flattened)
         scores: FAISS L2 distances for each document (lower = better)
         sources: DO index (0-based) for each document
+        doc_ids: Document identifiers for each document
         comm_size_mb: Total communication size in MB
     """
     messages = []
@@ -92,14 +93,16 @@ def submit_question(
     print(f"✓ Received {len(replies)}/{len(messages)} results")
 
     # Collect results with source tracking
-    documents, scores, sources = [], [], []
+    documents, scores, sources, doc_ids = [], [], [], []
     for node_idx, reply in enumerate(replies):
         if reply.has_content():
             docs = reply.content["docs_n_scores"]["documents"]
             scrs = reply.content["docs_n_scores"]["scores"]
+            dids = reply.content["docs_n_scores"].get("doc_ids", [])
             documents.extend(docs)
             scores.extend(scrs)
             sources.extend([node_idx] * len(docs))  # Track which DO returned each doc
+            doc_ids.extend(dids if dids else ["unknown"] * len(docs))
 
     # Calculate size of incoming messages (retrieved documents)
     response_size_bytes = sum(
@@ -109,7 +112,7 @@ def submit_question(
     # Total communication size in MB
     total_comm_size_mb = (query_size_bytes + response_size_bytes) / (1024 * 1024)
 
-    return documents, scores, sources, total_comm_size_mb
+    return documents, scores, sources, doc_ids, total_comm_size_mb
 
 
 app = ServerApp()
@@ -200,6 +203,9 @@ def main(grid: Grid, context: Context) -> None:
     confusion_matrix = defaultdict(
         lambda: defaultdict(lambda: defaultdict(int))
     )  # [dataset][expected][predicted] = count
+    retrieval_log: list[
+        dict
+    ] = []  # Per-query retrieval records for leakage/quality analysis
     for dataset_name in qa_datasets:
         q_idx = 0
         print(f"\n{'='*60}")
@@ -213,7 +219,7 @@ def main(grid: Grid, context: Context) -> None:
                 break
             question = q["question"]
             q_st = time.time()
-            docs, scores, doc_sources, comm_size_mb = submit_question(
+            docs, scores, doc_sources, doc_ids, comm_size_mb = submit_question(
                 grid,
                 question,
                 q_id,
@@ -224,6 +230,26 @@ def main(grid: Grid, context: Context) -> None:
             )
             result = merger.merge(docs, scores, sources=doc_sources)
             merged_docs = result.documents
+
+            # Build pre-merge retrieval record
+            pre_merge = [
+                {"doc_id": did, "score": float(sc), "source_do": int(src)}
+                for did, sc, src in zip(doc_ids, scores, doc_sources)
+            ]
+            # Match post-merge docs back to doc_ids via content
+            content_to_id = {doc: did for doc, did in zip(docs, doc_ids)}
+            post_merge_ids = [content_to_id.get(d, "unknown") for d in merged_docs]
+            retrieval_log.append(
+                {
+                    "dataset": dataset_name,
+                    "question_idx": q_idx,
+                    "question_id": q_id,
+                    "pre_merge": pre_merge,
+                    "post_merge_doc_ids": post_merge_ids,
+                    "post_merge_scores": [float(s) for s in result.scores],
+                }
+            )
+
             options = q["options"]
             answer = q["answer"]
 
@@ -329,3 +355,14 @@ def main(grid: Grid, context: Context) -> None:
                     row_values.append(f"{count:4d}")
                 print(f"    {expected_opt}    " + "    ".join(row_values))
             print()  # Empty line for separation
+
+    # Write retrieval log to JSON for leakage analysis and retrieval quality metrics
+    if retrieval_log:
+        output_dir = context.run_config.get("server-output-dir", ".")
+        log_path = Path(output_dir) / "retrieval_log.json"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "w") as f:
+            json.dump(retrieval_log, f, indent=2)
+        print(
+            f"\n📝 Retrieval log written to {log_path} ({len(retrieval_log)} queries)"
+        )

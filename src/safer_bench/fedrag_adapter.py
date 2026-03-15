@@ -13,6 +13,7 @@ from typing_extensions import Dict, List, Optional
 
 from omegaconf import DictConfig
 from loguru import logger
+from hydra.core.hydra_config import HydraConfig
 from syft_flwr.bootstrap import bootstrap as syft_flwr_bootstrap
 
 from safer_bench.models import FederationInfo
@@ -271,6 +272,12 @@ class FedRAGProjectAdapter:
         project_root = Path(__file__).parent.parent.parent
         mirage_file_path = project_root / "datasets" / "mirage_qa.json"
         app_config["server-mirage-qa-path"] = str(mirage_file_path.resolve())
+
+        # Pass output directory so server_app can write retrieval logs there
+        hydra_cfg = HydraConfig.get()
+        app_config["server-output-dir"] = str(
+            Path(hydra_cfg.runtime.output_dir).resolve()
+        )
 
     def _copy_uv_sources(self, pyproject: Dict):
         """Copy [tool.uv.sources] from main project to FedRAG project.
