@@ -27,6 +27,7 @@ qa:
 
 # Retrieval parameters
 retrieval:
+  enabled: true  # Set to false for no-retrieval baseline (LLM answers without RAG context)
   k_nn: 8  # k-nearest neighbors (can sweep: 1, 5, 10, 20)
   chunk_size: 512  # Chunk size (can sweep: 256, 512, 1024)
   chunk_overlap: 50  # Overlap (can sweep: 0, 50, 100)

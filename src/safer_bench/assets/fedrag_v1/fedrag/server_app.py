@@ -120,6 +120,12 @@ app = ServerApp()
 
 @app.main()
 def main(grid: Grid, context: Context) -> None:
+    # Check retrieval mode before waiting for client nodes
+    retrieval_enabled_raw = context.run_config.get("retrieval-enabled", True)
+    retrieval_enabled = str(retrieval_enabled_raw).lower() == "true"
+    if not retrieval_enabled:
+        print("⚠️  Retrieval DISABLED — running no-RAG baseline (LLM only)")
+
     node_ids = node_online_loop(grid)
 
     # k-nearest-neighbors for document retrieval at each client
@@ -133,35 +139,36 @@ def main(grid: Grid, context: Context) -> None:
     if query_timeout:
         print(f"✓ Per-query timeout: {query_timeout}s")
 
-    # Parse merger configuration with error handling
-    merger_type = context.run_config.get("merger-type", "rrf")
-    merger_params_json = context.run_config.get("merger-params", "{}")
-    try:
-        merger_params = json.loads(merger_params_json)
-    except json.JSONDecodeError:
-        print("⚠️ Invalid merger-params JSON, using defaults")
-        merger_params = {}
+    if retrieval_enabled:
+        # Parse merger configuration with error handling
+        merger_type = context.run_config.get("merger-type", "rrf")
+        merger_params_json = context.run_config.get("merger-params", "{}")
+        try:
+            merger_params = json.loads(merger_params_json)
+        except json.JSONDecodeError:
+            print("⚠️ Invalid merger-params JSON, using defaults")
+            merger_params = {}
 
-    # Build merger config
-    merger_config = {
-        "knn": knn,
-        **merger_params,  # Include k_rrf, normalization, weights from JSON
-    }
+        # Build merger config
+        merger_config = {
+            "knn": knn,
+            **merger_params,  # Include k_rrf, normalization, weights from JSON
+        }
 
-    # Create merger with fallback on error
-    try:
-        merger = create_merger(merger_type, **merger_config)
-        print(f"✓ Using merger: {merger_type}")
-    except ValueError as e:
-        print(f"❌ Invalid merger config: {e}")
-        print("   Falling back to RRF")
-        merger = create_merger("rrf", knn=knn, k_rrf=60)
+        # Create merger with fallback on error
+        try:
+            merger = create_merger(merger_type, **merger_config)
+            print(f"✓ Using merger: {merger_type}")
+        except ValueError as e:
+            print(f"❌ Invalid merger config: {e}")
+            print("   Falling back to RRF")
+            merger = create_merger("rrf", knn=knn, k_rrf=60)
 
-    corpus_names = context.run_config["clients-corpus-names"].split("|")
-    corpus_names = [c.lower() for c in corpus_names]  # make them lower case
+        corpus_names = context.run_config["clients-corpus-names"].split("|")
+        corpus_names = [c.lower() for c in corpus_names]  # make them lower case
 
-    # Create corpus iterator
-    corpus_names_iter = cycle(corpus_names)
+        # Create corpus iterator
+        corpus_names_iter = cycle(corpus_names)
     qa_datasets = context.run_config["server-qa-datasets"].split("|")
     qa_datasets = [qa_d.lower() for qa_d in qa_datasets]  # make them lower case
     qa_num = context.run_config.get("server-qa-num", None)
@@ -219,36 +226,42 @@ def main(grid: Grid, context: Context) -> None:
                 break
             question = q["question"]
             q_st = time.time()
-            docs, scores, doc_sources, doc_ids, comm_size_mb = submit_question(
-                grid,
-                question,
-                q_id,
-                knn,
-                node_ids,
-                corpus_names_iter,
-                timeout=query_timeout,
-            )
-            result = merger.merge(docs, scores, sources=doc_sources)
-            merged_docs = result.documents
 
-            # Build pre-merge retrieval record
-            pre_merge = [
-                {"doc_id": did, "score": float(sc), "source_do": int(src)}
-                for did, sc, src in zip(doc_ids, scores, doc_sources)
-            ]
-            # Match post-merge docs back to doc_ids via content
-            content_to_id = {doc: did for doc, did in zip(docs, doc_ids)}
-            post_merge_ids = [content_to_id.get(d, "unknown") for d in merged_docs]
-            retrieval_log.append(
-                {
-                    "dataset": dataset_name,
-                    "question_idx": q_idx,
-                    "question_id": q_id,
-                    "pre_merge": pre_merge,
-                    "post_merge_doc_ids": post_merge_ids,
-                    "post_merge_scores": [float(s) for s in result.scores],
-                }
-            )
+            if retrieval_enabled:
+                docs, scores, doc_sources, doc_ids, comm_size_mb = submit_question(
+                    grid,
+                    question,
+                    q_id,
+                    knn,
+                    node_ids,
+                    corpus_names_iter,
+                    timeout=query_timeout,
+                )
+                result = merger.merge(docs, scores, sources=doc_sources)
+                merged_docs = result.documents
+
+                # Build pre-merge retrieval record
+                pre_merge = [
+                    {"doc_id": did, "score": float(sc), "source_do": int(src)}
+                    for did, sc, src in zip(doc_ids, scores, doc_sources)
+                ]
+                # Match post-merge docs back to doc_ids via content
+                content_to_id = {doc: did for doc, did in zip(docs, doc_ids)}
+                post_merge_ids = [content_to_id.get(d, "unknown") for d in merged_docs]
+                retrieval_log.append(
+                    {
+                        "dataset": dataset_name,
+                        "question_idx": q_idx,
+                        "question_id": q_id,
+                        "pre_merge": pre_merge,
+                        "post_merge_doc_ids": post_merge_ids,
+                        "post_merge_scores": [float(s) for s in result.scores],
+                    }
+                )
+            else:
+                # No-retrieval baseline: LLM answers without any RAG context
+                merged_docs = []
+                comm_size_mb = 0.0
 
             options = q["options"]
             answer = q["answer"]

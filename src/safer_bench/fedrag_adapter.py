@@ -205,6 +205,9 @@ class FedRAGProjectAdapter:
         app_config["server-qa-num"] = self.cfg.qa.get("num_questions", 10)
 
         # Retrieval configuration
+        app_config["retrieval-enabled"] = str(
+            self.cfg.retrieval.get("enabled", True)
+        ).lower()
         app_config["k-nn"] = self.cfg.retrieval.get("k_nn", 8)
         app_config["chunk-size"] = self.cfg.retrieval.get("chunk_size", 512)
         app_config["chunk-overlap"] = self.cfg.retrieval.get("chunk_overlap", 50)
