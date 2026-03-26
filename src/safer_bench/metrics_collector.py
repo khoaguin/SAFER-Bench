@@ -55,11 +55,20 @@ class MetricsCollector:
         #   Answered Questions:  2
         #   Accuracy:            0.0000 (0.00%)
         #   Mean Querying Time:  6.48s
+        #     ├─ Retrieval:      3.12s
+        #     ├─ Merge:          0.0012s
+        #     └─ LLM Inference:  3.35s
         #   Mean Comm. Cost:     0.1234 MB/query
         #   Total Comm. Cost:    12.34 MB
-        dataset_pattern = r"QA Dataset:\s*(\w+)\s*\n.*?Total Questions:\s+(\d+)\s*\n.*?Answered Questions:\s+(\d+)\s*\n.*?Accuracy:\s+([\d.]+).*?\n.*?Mean Querying Time:\s+([\d.nan]+)s?\s*\n.*?Mean Comm\. Cost:\s+([\d.nan]+)\s*MB/query\s*\n.*?Total Comm\. Cost:\s+([\d.nan]+)\s*MB"
+        # Note: timing breakdown lines are optional (may not appear in older runs)
+        dataset_pattern = r"QA Dataset:\s*(\w+)\s*\n.*?Total Questions:\s+(\d+)\s*\n.*?Answered Questions:\s+(\d+)\s*\n.*?Accuracy:\s+([\d.]+).*?\n.*?Mean Querying Time:\s+([\d.nan]+)s?\s*\n(.*?)Mean Comm\. Cost:\s+([\d.nan]+)\s*MB/query\s*\n.*?Total Comm\. Cost:\s+([\d.nan]+)\s*MB"
 
         matches = re.finditer(dataset_pattern, stdout, re.MULTILINE | re.DOTALL)
+
+        # Patterns for timing breakdown (applied to the captured block between query time and comm cost)
+        retrieval_pattern = re.compile(r"Retrieval:\s+([\d.]+)s")
+        merge_pattern = re.compile(r"Merge:\s+([\d.]+)s")
+        generation_pattern = re.compile(r"LLM Inference:\s+([\d.]+)s")
 
         for match in matches:
             dataset_name = match.group(1)
@@ -67,8 +76,9 @@ class MetricsCollector:
             answered_questions = int(match.group(3))
             accuracy = float(match.group(4))
             mean_time_str = match.group(5)
-            mean_comm_cost_str = match.group(6)
-            total_comm_cost_str = match.group(7)
+            timing_block = match.group(6)
+            mean_comm_cost_str = match.group(7)
+            total_comm_cost_str = match.group(8)
 
             # Handle 'nan' values
             mean_time = None if mean_time_str == "nan" else float(mean_time_str)
@@ -79,11 +89,21 @@ class MetricsCollector:
                 None if total_comm_cost_str == "nan" else float(total_comm_cost_str)
             )
 
+            # Parse timing breakdown (optional)
+            ret_match = retrieval_pattern.search(timing_block)
+            mrg_match = merge_pattern.search(timing_block)
+            gen_match = generation_pattern.search(timing_block)
+
             metrics[dataset_name] = {
                 "total_questions": total_questions,
                 "answered_questions": answered_questions,
                 "accuracy": accuracy,
                 "mean_query_time": mean_time,
+                "mean_retrieval_time": float(ret_match.group(1)) if ret_match else None,
+                "mean_merge_time": float(mrg_match.group(1)) if mrg_match else None,
+                "mean_generation_time": float(gen_match.group(1))
+                if gen_match
+                else None,
                 "mean_comm_cost_mb": mean_comm_cost,
                 "total_comm_cost_mb": total_comm_cost,
             }

@@ -274,6 +274,15 @@ class DatasetMetrics(BaseModel):
     mean_query_time: Optional[float] = Field(
         None, description="Mean query time in seconds"
     )
+    mean_retrieval_time: Optional[float] = Field(
+        None, description="Mean retrieval time in seconds"
+    )
+    mean_merge_time: Optional[float] = Field(
+        None, description="Mean merge time in seconds"
+    )
+    mean_generation_time: Optional[float] = Field(
+        None, description="Mean LLM inference time in seconds"
+    )
     mean_comm_cost_mb: Optional[float] = Field(
         None, description="Mean communication cost in MB per query"
     )

@@ -36,6 +36,7 @@ def query(msg: Message, context: Context):
     retriever = _get_retriever()
     # Use the knn value for retrieving the closest-k documents to the query
     knn = int(msg.content["config"]["knn"])
+    print(f"[CLIENT {node_id}] knn={knn} (querying {corpus_name})")
     retrieved_docs = retriever.query_faiss_index(corpus_name, question, knn)
 
     # Create lists with the computed scores, documents, and doc_ids

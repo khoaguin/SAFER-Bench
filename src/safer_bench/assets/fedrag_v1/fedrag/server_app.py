@@ -130,6 +130,7 @@ def main(grid: Grid, context: Context) -> None:
 
     # k-nearest-neighbors for document retrieval at each client
     knn = int(context.run_config["k-nn"])
+    print(f"[SERVER] knn={knn} (from run_config)")
 
     # Per-query timeout (0 or None = use env var default which is 10 hours for index building)
     query_timeout_raw = context.run_config.get("query-timeout", 300)
@@ -200,6 +201,9 @@ def main(grid: Grid, context: Context) -> None:
         defaultdict(int),
     )
     communication_sizes = defaultdict(list)  # Track communication size (MB) per dataset
+    retrieval_times = defaultdict(list)  # Track retrieval time per dataset
+    merge_times = defaultdict(list)  # Track merge time per dataset
+    generation_times = defaultdict(list)  # Track LLM inference time per dataset
 
     # Accuracy breakdown tracking
     option_correct = defaultdict(lambda: defaultdict(int))  # [dataset][option] = count
@@ -228,6 +232,7 @@ def main(grid: Grid, context: Context) -> None:
             q_st = time.time()
 
             if retrieval_enabled:
+                retrieval_st = time.time()
                 docs, scores, doc_sources, doc_ids, comm_size_mb = submit_question(
                     grid,
                     question,
@@ -237,8 +242,12 @@ def main(grid: Grid, context: Context) -> None:
                     corpus_names_iter,
                     timeout=query_timeout,
                 )
+                retrieval_et = time.time()
+
+                merge_st = time.time()
                 result = merger.merge(docs, scores, sources=doc_sources)
                 merged_docs = result.documents
+                merge_et = time.time()
 
                 # Build pre-merge retrieval record
                 pre_merge = [
@@ -266,9 +275,11 @@ def main(grid: Grid, context: Context) -> None:
             options = q["options"]
             answer = q["answer"]
 
+            generation_st = time.time()
             prompt, predicted_answer = llm_querier.answer(
                 question, merged_docs, options, dataset_name, max_new_tokens
             )
+            generation_et = time.time()
 
             # If the model did not predict any value,
             # then discard the question
@@ -279,6 +290,12 @@ def main(grid: Grid, context: Context) -> None:
                 q_time = q_et - q_st  # elapsed time in seconds
                 question_times[dataset_name].append(q_time)
                 communication_sizes[dataset_name].append(comm_size_mb)
+
+                # Store timing breakdown
+                if retrieval_enabled:
+                    retrieval_times[dataset_name].append(retrieval_et - retrieval_st)
+                    merge_times[dataset_name].append(merge_et - merge_st)
+                generation_times[dataset_name].append(generation_et - generation_st)
 
                 # Track accuracy breakdown metrics
                 option_total[dataset_name][answer] += 1
@@ -323,6 +340,20 @@ def main(grid: Grid, context: Context) -> None:
         print(f"  Answered Questions:  {len(pred_ans)}")
         print(f"  Accuracy:            {accuracy:.4f} ({accuracy*100:.2f}%)")
         print(f"  Mean Querying Time:  {elapsed_time:.2f}s")
+        # Timing breakdown
+        mean_gen_time = (
+            np.mean(generation_times[dataset_name])
+            if generation_times[dataset_name]
+            else 0.0
+        )
+        if retrieval_times[dataset_name]:
+            mean_ret_time = np.mean(retrieval_times[dataset_name])
+            mean_mrg_time = np.mean(merge_times[dataset_name])
+            print(f"    ├─ Retrieval:      {mean_ret_time:.2f}s")
+            print(f"    ├─ Merge:          {mean_mrg_time:.4f}s")
+            print(f"    └─ LLM Inference:  {mean_gen_time:.2f}s")
+        else:
+            print(f"    └─ LLM Inference:  {mean_gen_time:.2f}s (no retrieval)")
         print(f"  Mean Comm. Cost:     {mean_comm_size:.4f} MB/query")
         print(f"  Total Comm. Cost:    {total_comm_size:.2f} MB")
         print(f"{'─'*60}")

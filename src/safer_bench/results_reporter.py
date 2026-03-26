@@ -98,12 +98,15 @@ class ResultsReporter:
     def _format_configuration(self) -> str:
         """Format the configuration section."""
         privacy_str = f"{self.cfg.privacy.type}" if self.cfg.privacy.enabled else "None"
+        retrieval_enabled = self.cfg.retrieval.get("enabled", True)
+        k_nn = self.cfg.retrieval.get("k_nn", 8)
         return f"""### Configuration
 - Federation: {self.cfg.federation.name}
 - Data Owners: {self.cfg.federation.num_data_owners}
 - Retriever: {self.cfg.retriever.type}
 - LLM: {self.cfg.llm.model}
 - Merger: {self.cfg.merger.type}
+- Retrieval: {"enabled" if retrieval_enabled else "disabled (no-RAG baseline)"}, k_nn={k_nn}
 - Dataset Mode: {"Subset" if self.cfg.dataset.use_subset else "Full"}
 - Privacy: {privacy_str}
 - Approval Rate: {self.cfg.federation.approval.percentage * 100}%
@@ -183,6 +186,19 @@ class ResultsReporter:
                 f"({dataset_metrics.answered_questions}/{dataset_metrics.total_questions} questions)"
             )
             sections.append(f"- **Mean Query Time**: {mean_time_str}")
+            # Timing breakdown (if available)
+            if dataset_metrics.mean_retrieval_time is not None:
+                sections.append(
+                    f"  - Retrieval: {dataset_metrics.mean_retrieval_time:.2f}s"
+                )
+                sections.append(f"  - Merge: {dataset_metrics.mean_merge_time:.4f}s")
+                sections.append(
+                    f"  - LLM Inference: {dataset_metrics.mean_generation_time:.2f}s"
+                )
+            elif dataset_metrics.mean_generation_time is not None:
+                sections.append(
+                    f"  - LLM Inference: {dataset_metrics.mean_generation_time:.2f}s (no retrieval)"
+                )
             sections.append(f"- **Mean Communication Cost**: {mean_comm_str}")
             sections.append(f"- **Total Communication Cost**: {total_comm_str}\n")
 

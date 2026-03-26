@@ -209,6 +209,7 @@ class FedRAGProjectAdapter:
             self.cfg.retrieval.get("enabled", True)
         ).lower()
         app_config["k-nn"] = self.cfg.retrieval.get("k_nn", 8)
+        logger.info(f"[ADAPTER] knn={app_config['k-nn']} (injected into FedRAG config)")
         app_config["chunk-size"] = self.cfg.retrieval.get("chunk_size", 512)
         app_config["chunk-overlap"] = self.cfg.retrieval.get("chunk_overlap", 50)
         app_config["query-timeout"] = self.cfg.retrieval.get(
