@@ -128,7 +128,7 @@ clean-output:
     rm -rf outputs/*
     @echo -e "{{_green}}✅ Output directories cleaned{{_nc}}"
 
-# Generate specialty mapping for MIMIC-IV-Note dataset (required for specialty_6do federation)
+# Generate specialty mapping for MIMIC-IV-Note dataset (required for specialty_7do federation)
 generate-specialty-mapping *args="":
     @echo -e "{{_cyan}}🏥 Generating specialty mapping for MIMIC-IV-Note...{{_nc}}"
     uv run python scripts/generate_specialty_mapping.py {{args}}
