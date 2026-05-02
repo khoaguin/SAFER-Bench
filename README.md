@@ -1,6 +1,6 @@
-# SAFER-Bench
+# MedFed-RAG
 
-SAFER-Bench is a comprehensive benchmark framework for evaluating Federated Retrieval-Augmented Generation (RAG) systems with approval-based privacy controls. It enables systematic evaluation of retrieval algorithms, merging strategies, LLMs, and privacy mechanisms in realistic federated settings where Data Owners (DOs) maintain control over their data.
+MedFed-RAG is a comprehensive benchmark framework for evaluating Federated Retrieval-Augmented Generation (RAG) systems with approval-based privacy controls. It enables systematic evaluation of retrieval algorithms, merging strategies, LLMs, and privacy mechanisms in realistic federated settings where Data Owners (DOs) maintain control over their data.
 
 <p align="center">
   <img src="./docs/images/architecture.png" alt="safer-bench-architecture" width="700">
@@ -90,7 +90,7 @@ Benchmarks run against 5 medical QA datasets (100 questions each by default):
 1. Clone the repository and install dependencies:
 ```bash
 git clone <repo-url>
-cd safer-bench
+cd medfed-rag
 uv sync
 ```
 

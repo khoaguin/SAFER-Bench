@@ -1,5 +1,5 @@
 [project]
-name = "safer-bench"
+name = "medfed-rag"
 version = "0.1.0"
 description = "A comprehensive benchmark framework for evaluating Federated Retrieval-Augmented Generation (RAG) systems with approval-based privacy controls."
 readme = "README.md"
